@@ -1,0 +1,5 @@
+.python-version
+.idea
+__pycache__
+
+*.pyc
