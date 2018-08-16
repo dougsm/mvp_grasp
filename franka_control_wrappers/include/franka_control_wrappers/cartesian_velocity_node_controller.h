@@ -12,6 +12,8 @@
 #include <ros/node_handle.h>
 #include <ros/time.h>
 
+#include <franka/rate_limiting.h>
+
 #include "ros/ros.h"
 #include "geometry_msgs/Twist.h"
 
@@ -31,10 +33,20 @@ class CartesianVelocityNodeController : public controller_interface::MultiInterf
  private:
   franka_hw::FrankaVelocityCartesianInterface* velocity_cartesian_interface_;
   std::unique_ptr<franka_hw::FrankaCartesianVelocityHandle> velocity_cartesian_handle_;
+  std::unique_ptr<franka_hw::FrankaStateHandle> state_handle_;
 
   std::array<double, 6> velocity_command;
+  std::array<double, 6> last_sent_velocity;
   ros::Duration time_since_last_command;
   ros::Subscriber velocity_command_subscriber;
+  double max_duration_between_commands;
+
+  double max_velocity_linear;
+  double max_acceleration_linear;
+  double max_jerk_linear;
+  double max_velocity_angular;
+  double max_acceleration_angular;
+  double max_jerk_angular;
 };
 
 }  // namespace franka_control_wrappers

@@ -1,0 +1,15 @@
+cartesian_velocity_node_controller:
+    type: franka_control_wrappers/CartesianVelocityNodeController
+    arm_id: panda
+    # If no new velocity commands are received in time (seconds)
+    # Then set 0 velocity.
+    max_duration_between_commands: 0.025
+    rate_limiting:
+        linear:
+            velocity: 0.5
+            acceleration: 8.0
+            jerk: 2000.0
+        angular:
+            velocity: 0.5
+            acceleration: 5.0
+            jerk: 2000.0

@@ -47,15 +47,48 @@ bool CartesianVelocityNodeController::init(hardware_interface::RobotHW* robot_ha
   }
 
   try {
-    auto state_handle = state_interface->getHandle(arm_id + "_robot");
+    state_handle_ = std::make_unique<franka_hw::FrankaStateHandle>(
+        state_interface->getHandle(arm_id + "_robot"));
   } catch (const hardware_interface::HardwareInterfaceException& e) {
     ROS_ERROR_STREAM(
         "CartesianVelocityNodeController: Exception getting state handle: " << e.what());
     return false;
   }
 
-  velocity_command_subscriber = node_handle.subscribe("~cartesian_velocity",
-                                                       0,
+
+  node_handle.param<double>("max_duration_between_commands", max_duration_between_commands, 0.01);
+
+  // Rate Limiting
+  if(!node_handle.getParam("rate_limiting/linear/velocity", max_velocity_linear)) {
+    ROS_ERROR("CartesianVelocityNodeController: Could not get parameter rate_limiting/linear/velocity");
+    return false;
+  }
+  if(!node_handle.getParam("rate_limiting/linear/acceleration", max_acceleration_linear)) {
+    ROS_ERROR("CartesianVelocityNodeController: Could not get parameter rate_limiting/acc/acceleration");
+    return false;
+  }
+  if(!node_handle.getParam("rate_limiting/linear/jerk", max_jerk_linear)) {
+    ROS_ERROR("CartesianVelocityNodeController: Could not get parameter rate_limiting/linear/jerk");
+    return false;
+  }
+  if(!node_handle.getParam("rate_limiting/angular/velocity", max_velocity_angular)) {
+    ROS_ERROR("CartesianVelocityNodeController: Could not get parameter rate_limiting/angular/velocity");
+    return false;
+  }
+  if(!node_handle.getParam("rate_limiting/angular/acceleration", max_acceleration_angular)) {
+    ROS_ERROR("CartesianVelocityNodeController: Could not get parameter rate_limiting/acc/acceleration");
+    return false;
+  }
+  if(!node_handle.getParam("rate_limiting/angular/jerk", max_jerk_angular)) {
+    ROS_ERROR("CartesianVelocityNodeController: Could not get parameter rate_limiting/angular/jerk");
+    return false;
+  }
+
+  ROS_INFO_STREAM(max_velocity_linear << ", " << max_acceleration_linear << ", " << max_jerk_linear);
+  ROS_INFO_STREAM(max_velocity_angular << ", " << max_acceleration_angular << ", " << max_jerk_angular);
+
+  velocity_command_subscriber = node_handle.subscribe("cartesian_velocity",
+                                                       10,
                                                        &CartesianVelocityNodeController::cartesian_velocity_callback,
                                                        this);
 
@@ -65,6 +98,7 @@ bool CartesianVelocityNodeController::init(hardware_interface::RobotHW* robot_ha
 void CartesianVelocityNodeController::starting(const ros::Time& /* time */) {
   time_since_last_command = ros::Duration(0.0);
   velocity_command = {{0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
+  last_sent_velocity = {{0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
 }
 
 void CartesianVelocityNodeController::cartesian_velocity_callback(const geometry_msgs::Twist::ConstPtr& msg) {
@@ -82,10 +116,25 @@ void CartesianVelocityNodeController::update(const ros::Time& /* time */,
                                                 const ros::Duration& period) {
   time_since_last_command += period;
 
-  if(time_since_last_command.toSec() > 0.1) {
+  if(time_since_last_command.toSec() > max_duration_between_commands) {
     velocity_command = {{0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
   }
-  velocity_cartesian_handle_->setCommand(velocity_command);
+
+  auto state = state_handle_->getRobotState();
+
+  last_sent_velocity = franka::limitRate(
+    max_velocity_linear,
+    max_acceleration_linear,
+    max_jerk_linear,
+    max_velocity_angular,
+    max_acceleration_angular,
+    max_jerk_angular,
+    velocity_command,
+    state.O_dP_EE_c,
+    state.O_ddP_EE_c
+  );
+
+  velocity_cartesian_handle_->setCommand(last_sent_velocity);
 }
 
 void CartesianVelocityNodeController::stopping(const ros::Time& /*time*/) {
