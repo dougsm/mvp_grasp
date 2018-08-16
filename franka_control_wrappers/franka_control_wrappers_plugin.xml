@@ -1,0 +1,8 @@
+<library path="lib/libfranka_control_wrappers">
+  <class name="franka_control_wrappers/CartesianVelocityNodeController" type="franka_control_wrappers::CartesianVelocityNodeController" base_class_type="controller_interface::ControllerBase">
+    <description>
+      A Cartesian velocity controller that takes commands from a ROS subscriber.
+    </description>
+  </class>
+
+</library>

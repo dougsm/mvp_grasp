@@ -2,7 +2,11 @@ cmake_minimum_required(VERSION 2.8.3)
 project(franka_control_wrappers)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
-# add_compile_options(-std=c++11)
+#add_compile_options(-std=c++11)
+set(CMAKE_BUILD_TYPE Release)
+
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -10,17 +14,20 @@ project(franka_control_wrappers)
 find_package(catkin REQUIRED COMPONENTS
   franka_control
   franka_description
-  franka_example_controllers
+  ##franka_example_controllers
   franka_gripper
   franka_hw
   franka_msgs
   franka_visualization
   panda_moveit_config
+  geometry_msgs
+  rospy
+  roscpp
 )
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
-
+find_package(Franka 0.5.0 REQUIRED)
 
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
@@ -108,10 +115,18 @@ catkin_python_setup()
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-#  INCLUDE_DIRS include
-#  LIBRARIES franka_control_wrappers
-#  CATKIN_DEPENDS franka_control franka_description franka_example_controllers franka_gripper franka_hw franka_msgs franka_visualization panda_moveit_config
-#  DEPENDS system_lib
+  LIBRARIES franka_control_wrappers
+  CATKIN_DEPENDS
+    controller_interface
+    ## dynamic_reconfigure
+    franka_hw
+    geometry_msgs
+    hardware_interface
+    ##message_runtime
+    pluginlib
+    realtime_tools
+    roscpp
+  DEPENDS Franka
 )
 
 ###########
@@ -126,19 +141,27 @@ include_directories(
 )
 
 ## Declare a C++ library
-# add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/franka_control_wrappers.cpp
-# )
+add_library(franka_control_wrappers
+  src/cartesian_velocity_node_controller.cpp
+)
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
 ## either from message generation or dynamic reconfigure
 # add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(franka_control_wrappers
+  ${${PROJECT_NAME}_EXPORTED_TARGETS}
+  ${catkin_EXPORTED_TARGETS}
+  ##${PROJECT_NAME}_generate_messages_cpp
+  ${PROJECT_NAME}_gencpp
+  ##${PROJECT_NAME}_gencfg
+)
 
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 # add_executable(${PROJECT_NAME}_node src/franka_control_wrappers_node.cpp)
+
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -151,9 +174,19 @@ include_directories(
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-# target_link_libraries(${PROJECT_NAME}_node
-#   ${catkin_LIBRARIES}
-# )
+target_link_libraries(franka_control_wrappers PUBLIC
+  ${Franka_LIBRARIES}
+  ${catkin_LIBRARIES}
+)
+
+target_include_directories(franka_control_wrappers SYSTEM PUBLIC
+  ${Franka_INCLUDE_DIRS}
+  #${EIGEN3_INCLUDE_DIRS}
+  ${catkin_INCLUDE_DIRS}
+)
+target_include_directories(franka_control_wrappers PUBLIC
+  include
+)
 
 #############
 ## Install ##
