@@ -13,10 +13,10 @@ import geometry_msgs.msg
 
 # from helpers.gripper_action_client import set_finger_positions
 # from helpers.position_action_client import position_client, move_to_position
-from helpers.transforms import current_robot_pose, publish_tf_quaterion_as_transform, convert_pose, publish_pose_as_transform
+from dougsm_helpers.tf_helpers import current_robot_pose, publish_tf_quaterion_as_transform, convert_pose, publish_pose_as_transform
 # from helpers.covariance import generate_cartesian_covariance
 
-from helpers.panda_commander import PandaCommander
+from franka_control_wrappers.panda_commander import PandaCommander
 
 MOVING = False  # Flag whether the robot is moving under velocity control.
 CURR_Z = 0  # Current end-effector z height.
@@ -76,7 +76,7 @@ def execute_grasp(pc):
     # Offset for initial pose.
     initial_offset = 0.15
     gp_base.position.z = max(gp_base.position.z, 0.01)
-    gp_base.position.z += initial_offset + 0.125
+    gp_base.position.z += initial_offset + 0.13
 
     pc.goto_pose(gp_base, velocity=0.25)
 
