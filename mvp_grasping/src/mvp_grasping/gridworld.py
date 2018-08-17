@@ -7,13 +7,13 @@ class GridWorld:
             raise ValueError('Please make sure bounds[0, :] < bounds[1, :]')
         self.bounds = bounds
         self.res = resolution
-        self.map_shape = np.ceil((bounds[1, :] - bounds[0, :])/resolution).astype(np.int)
+        self.shape = np.ceil((bounds[1, :] - bounds[0, :])/resolution).astype(np.int)
         self.map_offset = bounds[0, :]/resolution * -1
         self.maps = {}
 
     def add_grid(self, name, init_value=0, extra_dims=(),):
-        shape = list(self.map_shape) + list(extra_dims)
-        self.maps[name] = np.full(self.map_shape, init_value)
+        shape = list(self.shape) + list(extra_dims)
+        self.maps[name] = np.full(shape, init_value)
 
     def pos_to_cell(self, pos):
         """
@@ -24,10 +24,10 @@ class GridWorld:
         """
         cell_ids = np.floor((pos / self.res) + self.map_offset).astype(np.int)
 
-        np.clip(cell_ids[:, 0], 0, self.map_shape[0]-1, cell_ids[:, 0])
-        np.clip(cell_ids[:, 1], 0, self.map_shape[1]-1, cell_ids[:, 1])
+        np.clip(cell_ids[:, 0], 0, self.shape[0]-1, cell_ids[:, 0])
+        np.clip(cell_ids[:, 1], 0, self.shape[1]-1, cell_ids[:, 1])
 
-        # check_bounds = (cell_ids >= 0) & (cell_ids < self.map_shape)
+        # check_bounds = (cell_ids >= 0) & (cell_ids < self.shape)
         # if not np.all(check_bounds):
         #         raise ValueError('Position is outside of bounds.')
         return np.flip(cell_ids, axis=1)
@@ -40,14 +40,14 @@ class GridWorld:
 
 
 if __name__ == '__main__':
-    h = HeightMap(np.array([
+    h = GridWorld(np.array([
         [-0.25, -0.8],
         [0.25, -0.3]
     ]), 0.005)
 
-    h.add_map('test')
+    h.add_grid('test')
 
-    print(h.map_shape)
+    print(h.shape)
     print(h.map_offset)
 
     cell_ids = h.pos_to_cell(np.array([
@@ -60,8 +60,8 @@ if __name__ == '__main__':
 
     print(h.cell_to_pos(cell_ids))
 
-    #surf_x_pos = h.cell_to_pos(np.vstack((np.arange(h.map_shape[0]), np.zeros(h.map_shape[0]))).T)
-    #surf_y_pos = h.cell_to_pos(np.vstack((np.zeros(h.map_shape[1]), np.arange(h.map_shape[1]))).T)
+    #surf_x_pos = h.cell_to_pos(np.vstack((np.arange(h.shape[0]), np.zeros(h.shape[0]))).T)
+    #surf_y_pos = h.cell_to_pos(np.vstack((np.zeros(h.shape[1]), np.arange(h.shape[1]))).T)
 
     #print(surf_x_pos)
     #print(surf_y_pos)

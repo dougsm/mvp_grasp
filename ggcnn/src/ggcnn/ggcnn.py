@@ -11,7 +11,7 @@ MODEL_FILE = 'models/epoch_29_model.hdf5'
 model = load_model(path.join(path.dirname(__file__), MODEL_FILE))
 graph = tf.get_default_graph()
 
-def proces_depth_image(depth, crop_size, out_size=300, return_mask=False):
+def process_depth_image(depth, crop_size, out_size=300, return_mask=False):
     imh, imw = depth.shape
 
     # Crop.
@@ -23,6 +23,8 @@ def proces_depth_image(depth, crop_size, out_size=300, return_mask=False):
     # OpenCV inpainting does weird things at the border.
     depth_crop = cv2.copyMakeBorder(depth_crop, 1, 1, 1, 1, cv2.BORDER_DEFAULT)
     depth_nan_mask = np.isnan(depth_crop).astype(np.uint8)
+
+    depth_crop[depth_nan_mask==1] = 0
 
     # Scale to keep as float, but has to be in bounds -1:1 to keep opencv happy.
     depth_scale = np.abs(depth_crop).max()
@@ -36,18 +38,18 @@ def proces_depth_image(depth, crop_size, out_size=300, return_mask=False):
 
     # Resize
     depth_crop = cv2.resize(depth_crop, (out_size, out_size), cv2.INTER_AREA)
-    depth_nan_mask = cv2.resize(depth_nan_mask, (out_size, out_size), cv2.INTER_NEAREST)
 
     if return_mask:
         depth_nan_mask = depth_nan_mask[1:-1, 1:-1]
+        depth_nan_mask = cv2.resize(depth_nan_mask, (out_size, out_size), cv2.INTER_NEAREST)
         return depth_crop, depth_nan_mask
     else:
         return depth_crop
 
 
-def predict(depth, process_depth=True, crop_size=300, out_size=300):
+def predict(depth, process_depth=True, crop_size=300, out_size=300, depth_nan_mask=None):
     if process_depth:
-        depth = process_depth_image(depth, crop_size, out_size, False)
+        depth, depth_nan_mask = process_depth_image(depth, crop_size, out_size, True)
 
     # Inference
     depth = np.clip((depth - depth.mean()), -1, 1)
@@ -55,7 +57,7 @@ def predict(depth, process_depth=True, crop_size=300, out_size=300):
         pred_out = model.predict(depth.reshape((1, 300, 300, 1)))
 
     points_out = pred_out[0].squeeze()
-    points_out[depth_nan] = 0
+    points_out[depth_nan_mask] = 0
     points_out = points_out ** 2
 
     # Calculate the angle map.

@@ -1,0 +1,5 @@
+<?xml version="1.0" ?>
+<launch>
+  <rosparam command="load" file="$(find mvp_grasping)/cfg/mvp_grasp.yaml" />
+  <node name="grasp_entropy_node" pkg="mvp_grasping" type="grasp_entropy_node.py" output="screen"/>
+</launch>

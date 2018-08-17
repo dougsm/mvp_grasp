@@ -11,12 +11,12 @@ grasp_entropy_node:
             angle: 18
     cost:
         dist_from_best_scale: 0.25
-        dist_from_best_gain: 0.25
+        dist_from_best_gain: 0.4
         dist_from_prev_view_scale: 0.1
         dist_from_prev_view_gain: 0.1
     height:
         z1: 0.5
-        z2: 0.25
+        z2: 0.15
     camera:
         info_topic: /camera/depth/camera_info
         depth_topic: /camera/depth/image_meters
