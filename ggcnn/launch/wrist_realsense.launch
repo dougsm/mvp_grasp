@@ -44,7 +44,7 @@ Processing enabled by this node:
   <!-- Camera device specific arguments -->
 
   <arg name="serial_no"           default=""/>
-  <arg name="json_file_path"      default="/home/guest/doug/grasp_ws/src/ggcnn_grasp/cfg/realsense.json"/>
+  <arg name="json_file_path"      default="$(find ggcnn)/cfg/realsense.json"/>
 
   <arg name="depth_width"         default="640"/>
   <arg name="depth_height"        default="480"/>
@@ -185,5 +185,5 @@ Processing enabled by this node:
 <!-- args="0.030 -0.020 0.066 3.1415 -1.571 0 /panda_hand /camera_link 100"  -->
 
   <node pkg="tf" type="static_transform_publisher" name="realsense_link_broadcaster"
-        args="0.052 -0.026 0.066 3.1415 -1.571 0 /panda_hand /camera_link 100" />
+        args="0.040 -0.026 0.066 3.1415 -1.571 0 /panda_hand /camera_link 100" />
 </launch>
