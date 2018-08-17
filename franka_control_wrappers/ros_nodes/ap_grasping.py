@@ -93,7 +93,7 @@ PREGRASP_POSE = [0.0, -0.45, 0.55, 2**0.5/2, -2**0.5/2, 0, 0]
 if __name__ == '__main__':
     rospy.init_node('panda_open_loop_grasp', anonymous=True)
 
-    next_view_srv = rospy.ServiceProxy('/panda_active_grasp/get_next_viewpoint',  NextViewpoint)
+    next_view_srv = rospy.ServiceProxy('/grasp_entropy_node/update_grid', NextViewpoint)
 
     pc = PandaCommander(group_name='panda_arm_hand')
     pc.set_gripper(0.1)
@@ -120,7 +120,12 @@ if __name__ == '__main__':
         gp.position.x = res.best_grasp.data[0]
         gp.position.y = res.best_grasp.data[1]
         gp.position.z = res.best_grasp.data[2]
-        q = tft.quaternion_from_euler(np.pi, 0, -1 * res.best_grasp.data[3] + np.pi)
+
+        ang = res.best_grasp.data[3]
+        if ang < 0:
+            ang += np.pi
+
+        q = tft.quaternion_from_euler(np.pi, 0, -1 * ang)
         gp.orientation.x = q[0]
         gp.orientation.y = q[1]
         gp.orientation.z = q[2]
