@@ -44,7 +44,7 @@ Processing enabled by this node:
   <!-- Camera device specific arguments -->
 
   <arg name="serial_no"           default=""/>
-  <arg name="json_file_path"      default="$(find ggcnn)/cfg/realsense.json"/>
+  <arg name="json_file_path"      default="$(find mvp_grasping)/cfg/realsense.json"/>
 
   <arg name="depth_width"         default="640"/>
   <arg name="depth_height"        default="480"/>

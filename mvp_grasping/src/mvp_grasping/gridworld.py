@@ -1,17 +1,18 @@
 import numpy as np
 
 
-class HeightMap:
+class GridWorld:
     def __init__(self, bounds, resolution):
         if np.any(bounds[0, :] > bounds[1, :]):
             raise ValueError('Please make sure bounds[0, :] < bounds[1, :]')
         self.bounds = bounds
-        self.res = np.array([resolution, resolution])  # Account for 0,0 being top left corner of an image.
+        self.res = resolution
         self.map_shape = np.ceil((bounds[1, :] - bounds[0, :])/resolution).astype(np.int)
         self.map_offset = bounds[0, :]/resolution * -1
         self.maps = {}
 
-    def add_map(self, name, init_value=0):
+    def add_grid(self, name, init_value=0, extra_dims=(),):
+        shape = list(self.map_shape) + list(extra_dims)
         self.maps[name] = np.full(self.map_shape, init_value)
 
     def pos_to_cell(self, pos):
