@@ -1,5 +1,5 @@
 import numpy as np
-from .timeit import TimeIt
+# from dougsm_heplers.timeit import TimeIt
 
 # def update_batch(data, ids, count, mean, var):
 #

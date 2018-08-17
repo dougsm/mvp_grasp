@@ -23,9 +23,10 @@ from ggcnn.grasp_stats import update_batch, update_batch_single_sample, update_h
 from ggcnn.heightmap import HeightMap
 from ggcnn.gridshow import gridshow
 
-from ggcnn.srv import NextViewpoint
+from ggcnn.srv import NextViewpoint, NextViewpointResponse
 from geometry_msgs.msg import Point
 from sensor_msgs.msg import Image, CameraInfo
+from std_msgs.msg import Float32MultiArray
 
 import cv_bridge
 bridge = cv_bridge.CvBridge()
@@ -56,6 +57,8 @@ class ViewpointEntropyCalculator:
         self.count_hist = np.zeros((self.hm.maps['count'].shape[0], self.hm.maps['count'].shape[1], self.hist_bins_a, self.hist_bins_q))
         self.count_hist[:, :, :, :] = 1
 
+        self.hist_mean = 0
+
         self.position_history = []
 
         # Useful meshgrid
@@ -63,11 +66,22 @@ class ViewpointEntropyCalculator:
         ys = np.arange(self.hm.bounds[0, 1], self.hm.bounds[1, 1], self.hm.res[1]) + self.hm.res[1] / 2
         self.xv, self.yv = np.meshgrid(xs, ys)
 
-        self.img_pub = rospy.Publisher('~ap_image', Image, queue_size=1)
+        # Get the camera parameters
+        camera_info_msg = rospy.wait_for_message('/camera/depth/camera_info', CameraInfo)
+        K = camera_info_msg.K
+        self.fx = K[0]
+        self.cx = K[2]
+        self.fy = K[4]
+        self.cy = K[5]
 
+        self.q_am = None
+        self.q_am_pos = None
+        self.q_am_ang = None
+
+        self.img_pub = rospy.Publisher('~ap_image', Image, queue_size=1)
+        rospy.Service('~get_next_viewpoint', NextViewpoint, self.get_next_viewpoint)
 
     def get_next_viewpoint(self, req):
-        print(0)
         camera_pose = current_robot_pose('panda_link0', 'camera_depth_optical_frame')
         cam_x = camera_pose.position.x
         cam_y = camera_pose.position.y
@@ -77,11 +91,10 @@ class ViewpointEntropyCalculator:
         self.hm.visited[newpos_pixel[0], newpos_pixel[1]] = self.hm.visited.max() + 1
 
         self.position_history.append((cam_x, cam_y, cam_z))
-        print(1)
         depth_msg = rospy.wait_for_message('/camera/depth/image_meters/', Image)
         depth = bridge.imgmsg_to_cv2(depth_msg)
 
-        crop_size = 460
+        crop_size = 350
         out_size = 300
         imh, imw = depth.shape
         depth_crop = cv2.resize(depth[(imh - crop_size) // 2:(imh - crop_size) // 2 + crop_size,
@@ -92,13 +105,10 @@ class ViewpointEntropyCalculator:
         depth = depth_crop
         points, angle, width_img = predict(depth, 300)
 
-        print()
         caminfo = rospy.wait_for_message('/camera/depth/camera_info', CameraInfo)
         K = np.array(caminfo.K).reshape((3, 3))
         x = ((np.vstack((np.linspace(90, 550, depth.shape[1], np.float), )*depth.shape[0]) - K[0, 2])/K[0, 0] * depth).flatten()
         y = ((np.vstack((np.linspace(10, 470, depth.shape[0], np.float), )*depth.shape[1]).T - K[1,2])/K[1, 1] * depth).flatten()
-
-        print(x.min(), x.max(), y.min(), y.max())
 
         cq = camera_pose.orientation
         camera_rot = tft.quaternion_matrix([cq.x, cq.y, cq.z, cq.w])[0:3, 0:3]
@@ -141,6 +151,8 @@ class ViewpointEntropyCalculator:
         q_am_pos = self.hm.cell_to_pos([q_am])[0]
         d_from_best_q = np.sqrt((self.xv - q_am_pos[0])**2 + (self.yv - q_am_pos[1])**2)  # Cost of moving away from the best grasp.
 
+        q_am_ang = best_angle[q_am]/hist_bins_a[q_am] * np.pi - np.pi/2
+
         # Calculated expected information gain.
         fov = int(cam_z * np.tan(55.0*400.0/480.0 / 180.0 * np.pi) / self.hm.res[0])  # Field of view in heightmap pixels.
         exp_inf_gain = gaussian_filter(hist_ent, fov/6, mode='nearest', truncate=3)
@@ -166,10 +178,14 @@ class ViewpointEntropyCalculator:
         if np.linalg.norm(diff) > move_amt:
             diff = diff/np.linalg.norm(diff) * move_amt
 
+        ret = NextViewpointResponse()
+
         p = Point()
         p.x = diff[0]
         p.y = diff[1]
         p.z = -1 * ((move_amt - np.linalg.norm(diff))/move_amt * 0.01 + 0.01)
+        ret.viewpoint = p
+        ret.best_grasp = [q_am_pos[0], q_am_pos[1], 0.02, q_am_ang]
 
         show = gridshow('Display',
                  [cv2.resize(points, hist_ent.shape), hist_mean, hist_ent, np.exp(exp_inf_gain), best_cost, self.hm.visited],
@@ -186,5 +202,4 @@ class ViewpointEntropyCalculator:
 if __name__ == '__main__':
     rospy.init_node('panda_active_grasp')
     VEC = ViewpointEntropyCalculator()
-    rospy.Service('~get_next_viewpoint', NextViewpoint, VEC.get_next_viewpoint)
     rospy.spin()

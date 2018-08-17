@@ -1,6 +1,5 @@
 import time
 
-
 class TimeIt:
     def __init__(self, s):
         self.s = s
