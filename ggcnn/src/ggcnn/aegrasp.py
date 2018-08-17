@@ -67,4 +67,4 @@ def predict(depth, crop_size, out_size=300):
 
     # points_out = (points_out - points_out.min())/(points_out.max() - points_out.min())
 
-    return points_out, ang_out, width_out
+    return points_out, ang_out, width_out, depth_crop

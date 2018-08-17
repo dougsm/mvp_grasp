@@ -2,6 +2,7 @@
 
 import time
 from os import path
+import rospy
 
 import numpy as np
 import tensorflow as tf
@@ -12,17 +13,18 @@ import scipy.ndimage as ndimage
 from skimage.draw import circle
 from skimage.feature import peak_local_max
 
-import rospy
 from cv_bridge import CvBridge
 from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import Image, CameraInfo
 from std_msgs.msg import Float32MultiArray
 
+from ggcnn.aegrasp import predict
+
 bridge = CvBridge()
 
 # Load the Network.
-MODEL_FILE = 'active_perception/models/epoch_29_model.hdf5'
-model = load_model(path.join(path.dirname(__file__), MODEL_FILE))
+# MODEL_FILE = 'active_perception/models/epoch_29_model.hdf5'
+# model = load_model(path.join(path.dirname(__file__), MODEL_FILE))
 
 rospy.init_node('ggcnn_detection')
 
@@ -80,60 +82,62 @@ def depth_callback(depth_message):
 
     with TimeIt('Crop'):
         depth = bridge.imgmsg_to_cv2(depth_message)
-
-        # Crop a square out of the middle of the depth and resize it to 300*300
+    #  Crop a square out of the middle of the depth and resize it to 300*300
         crop_size = 400
-        depth_crop = cv2.resize(depth[(480-crop_size)//2:(480-crop_size)//2+crop_size, (640-crop_size)//2:(640-crop_size)//2+crop_size], (300, 300))
+    #     depth_crop = cv2.resize(depth[(480-crop_size)//2:(480-crop_size)//2+crop_size, (640-crop_size)//2:(640-crop_size)//2+crop_size], (300, 300))
+    #
+    #     # Replace nan with 0 for inpainting.
+    #     depth_crop = depth_crop.copy()
+    #     depth_nan = np.isnan(depth_crop).copy()
+    #     depth_crop[depth_nan] = 0
+    #
+    # with TimeIt('Inpaint'):
+    #     # open cv inpainting does weird things at the border.
+    #     depth_crop = cv2.copyMakeBorder(depth_crop, 1, 1, 1, 1, cv2.BORDER_DEFAULT)
+    #
+    #     mask = (depth_crop == 0).astype(np.uint8)
+    #     # Scale to keep as float, but has to be in bounds -1:1 to keep opencv happy.
+    #     depth_scale = np.abs(depth_crop).max()
+    #     depth_crop = depth_crop.astype(np.float32)/depth_scale  # Has to be float32, 64 not supported.
+    #
+    #     depth_crop = cv2.inpaint(depth_crop, mask, 1, cv2.INPAINT_NS)
+    #
+    #     # Back to original size and value range.
+    #     depth_crop = depth_crop[1:-1, 1:-1]
+    #     depth_crop = depth_crop * depth_scale
+    #
+    #
+    # with TimeIt('Inference'):
+    #     # Run it through the network.
+    #     depth_crop = np.clip((depth_crop - depth_crop.mean()), -1, 1)
+    #     with graph.as_default():
+    #         pred_out = model.predict(depth_crop.reshape((1, 300, 300, 1)))
+    #
+    #     points_out = pred_out[0].squeeze()
+    #     points_out[depth_nan] = 0
+    #     np.clip(points_out, 0.0, 1.0, points_out)
+    #     points_out = points_out ** 2
+    #
+    # with TimeIt('Trig'):
+    #     # Calculate the angle map.
+    #     cos_out = pred_out[1].squeeze()
+    #     sin_out = pred_out[2].squeeze()
+    #     ang_out = np.arctan2(sin_out, cos_out)/2.0
+    #
+    #     width_out = pred_out[3].squeeze() * 150.0  # Scaled 0-150:0-1
+    #
+    # with TimeIt('Filter'):
+    #     # Filter the outputs.
+    #     points_out = ndimage.filters.gaussian_filter(points_out, 5.0)  # 3.0
+    #     ang_out = ndimage.filters.gaussian_filter(ang_out, 2.0)
 
-        # Replace nan with 0 for inpainting.
-        depth_crop = depth_crop.copy()
-        depth_nan = np.isnan(depth_crop).copy()
-        depth_crop[depth_nan] = 0
-
-    with TimeIt('Inpaint'):
-        # open cv inpainting does weird things at the border.
-        depth_crop = cv2.copyMakeBorder(depth_crop, 1, 1, 1, 1, cv2.BORDER_DEFAULT)
-
-        mask = (depth_crop == 0).astype(np.uint8)
-        # Scale to keep as float, but has to be in bounds -1:1 to keep opencv happy.
-        depth_scale = np.abs(depth_crop).max()
-        depth_crop = depth_crop.astype(np.float32)/depth_scale  # Has to be float32, 64 not supported.
-
-        depth_crop = cv2.inpaint(depth_crop, mask, 1, cv2.INPAINT_NS)
-
-        # Back to original size and value range.
-        depth_crop = depth_crop[1:-1, 1:-1]
-        depth_crop = depth_crop * depth_scale
+    points_out, ang_out, width_out, depth_crop = predict(depth, crop_size)
 
     with TimeIt('Calculate Depth'):
         # Figure out roughly the depth in mm of the part between the grippers for collision avoidance.
         depth_center = depth_crop[100:141, 130:171].flatten()
         depth_center.sort()
         depth_center = depth_center[:10].mean() * 1000.0
-
-    with TimeIt('Inference'):
-        # Run it through the network.
-        depth_crop = np.clip((depth_crop - depth_crop.mean()), -1, 1)
-        with graph.as_default():
-            pred_out = model.predict(depth_crop.reshape((1, 300, 300, 1)))
-
-        points_out = pred_out[0].squeeze()
-        points_out[depth_nan] = 0
-        np.clip(points_out, 0.0, 1.0, points_out)
-        points_out = points_out ** 2
-
-    with TimeIt('Trig'):
-        # Calculate the angle map.
-        cos_out = pred_out[1].squeeze()
-        sin_out = pred_out[2].squeeze()
-        ang_out = np.arctan2(sin_out, cos_out)/2.0
-
-        width_out = pred_out[3].squeeze() * 150.0  # Scaled 0-150:0-1
-
-    with TimeIt('Filter'):
-        # Filter the outputs.
-        points_out = ndimage.filters.gaussian_filter(points_out, 5.0)  # 3.0
-        ang_out = ndimage.filters.gaussian_filter(ang_out, 2.0)
 
     with TimeIt('Control'):
         # Calculate the best pose from the camera intrinsics.
