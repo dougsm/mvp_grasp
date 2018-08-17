@@ -82,10 +82,13 @@ class ViewpointEntropyCalculator:
         rospy.Service('~get_next_viewpoint', NextViewpoint, self.get_next_viewpoint)
 
     def get_next_viewpoint(self, req):
+        print(1)
         camera_pose = current_robot_pose('panda_link0', 'camera_depth_optical_frame')
         cam_x = camera_pose.position.x
         cam_y = camera_pose.position.y
         cam_z = camera_pose.position.z
+
+        print(2)
 
         newpos_pixel = self.hm.pos_to_cell([[cam_x, cam_y]])[0]
         self.hm.visited[newpos_pixel[0], newpos_pixel[1]] = self.hm.visited.max() + 1
@@ -103,8 +106,10 @@ class ViewpointEntropyCalculator:
         depth_nan = np.isnan(depth_crop).copy()
         depth_crop[depth_nan] = 0
         depth = depth_crop
-        points, angle, width_img = predict(depth, 300)
+        points, angle, width_img, depth_crop = predict(depth, 300)
 
+
+        print(3)
         caminfo = rospy.wait_for_message('/camera/depth/camera_info', CameraInfo)
         K = np.array(caminfo.K).reshape((3, 3))
         x = ((np.vstack((np.linspace(90, 550, depth.shape[1], np.float), )*depth.shape[0]) - K[0, 2])/K[0, 0] * depth).flatten()
@@ -151,7 +156,7 @@ class ViewpointEntropyCalculator:
         q_am_pos = self.hm.cell_to_pos([q_am])[0]
         d_from_best_q = np.sqrt((self.xv - q_am_pos[0])**2 + (self.yv - q_am_pos[1])**2)  # Cost of moving away from the best grasp.
 
-        q_am_ang = best_angle[q_am]/hist_bins_a[q_am] * np.pi - np.pi/2
+        q_am_ang = best_angle[q_am]/self.hist_bins_a * np.pi - np.pi/2
 
         # Calculated expected information gain.
         fov = int(cam_z * np.tan(55.0*400.0/480.0 / 180.0 * np.pi) / self.hm.res[0])  # Field of view in heightmap pixels.
@@ -185,8 +190,10 @@ class ViewpointEntropyCalculator:
         p.y = diff[1]
         p.z = -1 * ((move_amt - np.linalg.norm(diff))/move_amt * 0.01 + 0.01)
         ret.viewpoint = p
-        ret.best_grasp = [q_am_pos[0], q_am_pos[1], 0.02, q_am_ang]
+        ret.best_grasp = Float32MultiArray()
+        ret.best_grasp.data = [q_am_pos[0], q_am_pos[1], 0.03, q_am_ang]
 
+        print(4)
         show = gridshow('Display',
                  [cv2.resize(points, hist_ent.shape), hist_mean, hist_ent, np.exp(exp_inf_gain), best_cost, self.hm.visited],
                  [None, None, None, None, None, None],
@@ -194,9 +201,10 @@ class ViewpointEntropyCalculator:
                  3,
                  False)
 
+        print(5)
         self.img_pub.publish(bridge.cv2_to_imgmsg(show))
 
-        return p
+        return ret
 
 
 if __name__ == '__main__':

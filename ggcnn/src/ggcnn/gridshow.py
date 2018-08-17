@@ -2,7 +2,7 @@ import numpy as np
 import cv2
 
 
-def gridshow(name, imgs, scales, cmaps, width, border=10, show=True):
+def gridshow(name, imgs, scales, cmaps, width, border=10, show=False):
     """Display images in a grid."""
     imgrows = []
     imgcols = []
