@@ -14,58 +14,17 @@ import geometry_msgs.msg
 from dougsm_helpers.tf_helpers import current_robot_pose, publish_tf_quaterion_as_transform, convert_pose, publish_pose_as_transform
 
 from franka_control_wrappers.panda_commander import PandaCommander
-from ggcnn_grasp.srv import NextViewpoint
+from ggcnn.srv import NextViewpoint
 
 MOVING = False  # Flag whether the robot is moving under velocity control.
 CURR_Z = 0  # Current end-effector z height.
 
-def execute_grasp(pc):
+def execute_grasp(pc, gp_base):
     # Execute a grasp.
     global MOVING
     global CURR_Z
     global start_force_srv
     global stop_force_srv
-
-    # Get the positions.
-    msg = rospy.wait_for_message('/ggcnn/out/command', std_msgs.msg.Float32MultiArray)
-    d = list(msg.data)
-
-    # Calculate the gripper width.
-    grip_width = d[4]
-    # Convert width in pixels to m.
-    # 0.07 is distance from end effector (CURR_Z) to camera.
-    # 0.1 is approx degrees per pixel for the realsense.
-    g_width = 2 * ((CURR_Z + 0.07)) * np.tan(0.1 * grip_width / 2.0 / 180.0 * np.pi)
-    # Convert into motor positions.
-    #g = min((1 - (min(g_width, 70)/70)) * (6800-4000) + 4000, 5500)
-
-
-    # pc.set_gripper(g_width + 0.01)
-
-
-    # Construct the Pose in the frame of the camera.
-    gp = geometry_msgs.msg.Pose()
-    gp.position.x = d[0]
-    gp.position.y = d[1]
-    gp.position.z = d[2]
-    q = tft.quaternion_from_euler(0, 0, -1 * d[3] - np.pi/2)
-    gp.orientation.x = q[0]
-    gp.orientation.y = q[1]
-    gp.orientation.z = q[2]
-    gp.orientation.w = q[3]
-
-    print(gp)
-    gp_base = convert_pose(gp, 'camera_depth_optical_frame', 'panda_link0')
-    gpbo = gp_base.orientation
-    e = tft.euler_from_quaternion([gpbo.x, gpbo.y, gpbo.z, gpbo.w])
-
-    q = tft.quaternion_from_euler(np.pi, 0, e[2])
-    gp_base.orientation.x = q[0]
-    gp_base.orientation.y = q[1]
-    gp_base.orientation.z = q[2]
-    gp_base.orientation.w = q[3]
-
-    publish_pose_as_transform(gp_base, 'panda_link0', 'G', 0.5)
 
     if raw_input('Looks Good? Y/n') not in ['', 'y', 'Y']:
         return
@@ -147,7 +106,8 @@ if __name__ == '__main__':
 
     while not rospy.is_shutdown():
 
-        delta = next_view_srv().viewpoint
+        res = next_view_srv()
+        delta = res.viewpoint
 
         print(delta)
 
@@ -156,10 +116,25 @@ if __name__ == '__main__':
         curr_pose.position.y += delta.y
         curr_pose.position.z += delta.z
 
+        gp = geometry_msgs.msg.Pose()
+        gp.position.x = res.best_grasp.data[0]
+        gp.position.y = res.best_grasp.data[1]
+        gp.position.z = res.best_grasp.data[2]
+        q = tft.quaternion_from_euler(np.pi, 0, -1 * res.best_grasp.data[3] + np.pi)
+        gp.orientation.x = q[0]
+        gp.orientation.y = q[1]
+        gp.orientation.z = q[2]
+        gp.orientation.w = q[3]
+
+        publish_pose_as_transform(gp, 'panda_link0', 'G', 0.5)
+
         if curr_pose.position.z < 0.35:
-            pc.goto_named_pose('grip_ready', velocity=0.5)
+            execute_grasp(pc, gp)
+            pc.goto_named_pose('grip_ready', velocity=0.2)
+            rospy.sleep(1.0)
+            pc.set_gripper(0.1)
             break
 
-        p = curr_pose.position
-
-        pc.goto_pose([p.x, p.y, p.z, 2**0.5/2, -2**0.5/2, 0, 0], velocity=0.5)
+        else:
+            p = curr_pose.position
+            pc.goto_pose([p.x, p.y, p.z, 2**0.5/2, -2**0.5/2, 0, 0], velocity=0.5)
