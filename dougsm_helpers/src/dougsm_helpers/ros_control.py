@@ -13,6 +13,7 @@ class ControlSwitcher:
         self.lister_srv = rospy.ServiceProxy(controller_manager_node + '/list_controllers', cm_srv.ListControllers)
 
     def switch_controller(self, controller_name):
+        rospy.sleep(0.25)
         start_controllers = [self.controllers[controller_name]]
         stop_controllers = [self.controllers[n] for n in self.controllers if n != controller_name]
 
