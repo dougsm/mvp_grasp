@@ -39,14 +39,17 @@ class CartesianVelocityNodeController : public controller_interface::MultiInterf
   std::array<double, 6> last_sent_velocity;
   ros::Duration time_since_last_command;
   ros::Subscriber velocity_command_subscriber;
-  double max_duration_between_commands;
 
+  // Parameters
+  double max_duration_between_commands;
   double max_velocity_linear;
   double max_acceleration_linear;
   double max_jerk_linear;
   double max_velocity_angular;
   double max_acceleration_angular;
   double max_jerk_angular;
+  bool stop_on_contact;
+
 };
 
 }  // namespace franka_control_wrappers

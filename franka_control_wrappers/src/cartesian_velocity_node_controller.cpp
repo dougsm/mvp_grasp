@@ -84,6 +84,8 @@ bool CartesianVelocityNodeController::init(hardware_interface::RobotHW* robot_ha
     return false;
   }
 
+  node_handle.param<bool>("stop_on_contact", stop_on_contact, true);
+
   velocity_command_subscriber = node_handle.subscribe("cartesian_velocity",
                                                        10,
                                                        &CartesianVelocityNodeController::cartesian_velocity_callback,
@@ -118,6 +120,15 @@ void CartesianVelocityNodeController::update(const ros::Time& /* time */,
   }
 
   auto state = state_handle_->getRobotState();
+
+  if(stop_on_contact) {
+    for (size_t i = 0; i < state.cartesian_contact.size(); i++) {
+      if(state.cartesian_contact[i]) {
+        velocity_command = {{0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
+        // ROS_ERROR_STREAM("Detected Cartesian Contact in Direction "  << i);
+      }
+    }
+  }
 
   last_sent_velocity = franka::limitRate(
     max_velocity_linear,
