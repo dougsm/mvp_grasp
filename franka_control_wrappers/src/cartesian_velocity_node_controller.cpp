@@ -84,9 +84,6 @@ bool CartesianVelocityNodeController::init(hardware_interface::RobotHW* robot_ha
     return false;
   }
 
-  ROS_INFO_STREAM(max_velocity_linear << ", " << max_acceleration_linear << ", " << max_jerk_linear);
-  ROS_INFO_STREAM(max_velocity_angular << ", " << max_acceleration_angular << ", " << max_jerk_angular);
-
   velocity_command_subscriber = node_handle.subscribe("cartesian_velocity",
                                                        10,
                                                        &CartesianVelocityNodeController::cartesian_velocity_callback,

@@ -1,0 +1,18 @@
+<?xml version="1.0" ?>
+<launch>
+
+  <arg name="robot_ip" default="172.16.0.2" />
+  <arg name="load_gripper" default="true" />
+
+  <include file="$(find franka_control)/launch/franka_control.launch">
+    <arg name="robot_ip" value="$(arg robot_ip)" />
+  </include>
+
+  <include file="$(find panda_moveit_config)/launch/panda_moveit.launch" />
+  <include file="$(find panda_moveit_config)/launch/moveit_rviz.launch" />
+
+  <include file="$(find franka_control_wrappers)/launch/cartesian_velocity_controller.launch">
+    <arg name="stopped" value="true" />
+  </include>
+
+</launch>
