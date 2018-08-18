@@ -142,6 +142,10 @@ class PandaCommander(object):
         )
         return client.wait_for_result()
 
+    def stop(self):
+        if self.active_group:
+            self.active_group.stop()
+
 if __name__ == '__main__':
     rospy.init_node('panda_commander_test', anonymous=True)
     pc = PandaCommander(group_name='panda_arm_hand')

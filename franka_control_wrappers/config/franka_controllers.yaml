@@ -8,9 +8,9 @@ cartesian_velocity_node_controller:
         linear:
             velocity: 0.5
             acceleration: 8.0
-            jerk: 2000.0
+            jerk: 1000.0
         angular:
             velocity: 0.5
             acceleration: 5.0
-            jerk: 2000.0
+            jerk: 1000.0
     stop_on_contact: true

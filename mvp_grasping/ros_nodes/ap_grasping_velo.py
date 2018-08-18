@@ -1,85 +1,74 @@
 #! /usr/bin/env python
 
+from __future__ import division, print_function
+
 import rospy
 import tf.transformations as tft
 
 import numpy as np
 
-# import kinova_msgs.msg
-# import kinova_msgs.srv
-import std_msgs.msg
-import std_srvs.srv
-import geometry_msgs.msg
+from std_msgs.msg import Empty
+from geometry_msgs.msg import Twist, Pose
+from franka_msgs.msg import FrankaState, Errors as FrankaErrors
+from std_srvs.srv import Empty as EmptySrv
+
+from franka_control_wrappers.panda_commander import PandaCommander
 
 from dougsm_helpers.tf_helpers import current_robot_pose, publish_tf_quaterion_as_transform, convert_pose, publish_pose_as_transform
 from dougsm_helpers.timeit import TimeIt
+from dougsm_helpers.ros_control import ControlSwitcher
 
-from ggcnn.srv import NextViewpoint
+from mvp_grasping.srv import NextViewpoint, NextViewpointRequest
 
-def move_to_pose_velo(d_pose):
-    p = rospy.Publisher('/cartesian_velocity_node_controller/cartesian_velocity', geometry_msgs.msg.Twist, queue_size=1)
+DIE = False
 
-    velo = geometry_msgs.msg.Twist()
+class ActiveGraspController:
+    def __init__(self):
+        entropy_node_name = '/grasp_entropy_node'
+        rospy.wait_for_service(entropy_node_name + '/update_grid')
+        self.entropy_srv = rospy.ServiceProxy(entropy_node_name + '/update_grid', NextViewpoint)
+        rospy.wait_for_service(entropy_node_name + '/reset_grid')
+        self.entropy_reset_srv = rospy.ServiceProxy(entropy_node_name + '/reset_grid', EmptySrv)
 
-    scale_linear = 0.7
-    scale_angular = 0.5
-    threshold = 0.005
+        self.curr_velocity_publish_rate = 100.0  # Hz
+        self.curr_velo_pub = rospy.Publisher('/cartesian_velocity_node_controller/cartesian_velocity', Twist, queue_size=1)
+        self.curr_velo = Twist()
+        self.best_grasp = Pose()
 
-    dx = 1
-    dy = 1
-    dz = 1
-    droll = 1
-    dpitch = 1
-    dyaw = 1
+        self.update_rate = 4.0  # Hz
+        update_topic_name = '~/update'
+        self.update_pub = rospy.Publisher(update_topic_name, Empty, queue_size=1)
+        rospy.Subscriber(update_topic_name, Empty, self.__update_callback, queue_size=1)
 
-    while abs(droll) > threshold or abs(dpitch) > threshold or abs(dyaw) > threshold or abs(dx) > threshold or abs(dy) > threshold or abs(dz) > threshold:
-        curr_pose = current_robot_pose('panda_link0', 'panda_EE')
+        self.cs = ControlSwitcher({'moveit': 'position_joint_trajectory_controller',
+                                   'velocity': 'cartesian_velocity_node_controller'})
+        self.cs.switch_controller('moveit')
+        self.pc = PandaCommander(group_name='panda_arm_hand')
 
-        # Cartesian
-        dx = d_pose[0] - curr_pose.position.x
-        dy = d_pose[1] - curr_pose.position.y
-        dz = d_pose[2] - curr_pose.position.z
+        self.robot_state = None
+        rospy.Subscriber('/franka_state_controller/franka_states', FrankaState, self.__robot_state_callback, queue_size=1)
 
-        velo.linear.x = dx * scale_linear
-        velo.linear.y = dy * scale_linear
-        velo.linear.z = dz * scale_linear
+    def __robot_state_callback(self, msg):
+        self.robot_state = msg
+        for s in FrankaErrors.__slots__:
+            if getattr(msg.current_errors, s):
+                self.stop()
+                rospy.logerr('Robot Error Detected')
+                DIE = True
+                raise SystemExit()
 
-        # Angular
-        cpq = curr_pose.orientation
-        dq = tft.quaternion_multiply(d_pose[3:], tft.quaternion_conjugate([cpq.x, cpq.y, cpq.z, cpq.w]))
-        d_euler = tft.euler_from_quaternion(dq)
-        droll = (d_euler[0]) * 1
-        dpitch = (d_euler[1]) * 1
-        dyaw = (d_euler[2]) * 1
-
-        velo.angular.x = droll * scale_angular
-        velo.angular.y = dpitch * scale_angular
-        velo.angular.z = dyaw * scale_angular
-
-        p.publish(velo)
-        rospy.sleep(0.001)
-
-    velo.linear.x = 0
-    velo.linear.y = 0
-    velo.linear.z = 0
-    velo.angular.x = 0
-    velo.angular.y = 0
-    velo.angular.z = 0
-    p.publish(velo)
-
-
-def update_callback(msg):
-    with TimeIt('Callback'):
-        res = next_view_srv()
+    def __update_callback(self, msg):
+        res = self.entropy_srv()
         delta = res.viewpoint
 
         vscale = 2
 
-        velo.linear.x = delta.x * vscale
-        velo.linear.y = delta.y * vscale
-        velo.linear.z = delta.z * vscale
+        self.curr_velo.linear.x = delta.x * vscale
+        self.curr_velo.linear.y = delta.y * vscale
+        self.curr_velo.linear.z = delta.z * vscale
 
-        gp = geometry_msgs.msg.Pose()
+        # Publish pose.
+        gp = Pose()
         gp.position.x = res.best_grasp.data[0]
         gp.position.y = res.best_grasp.data[1]
         gp.position.z = res.best_grasp.data[2]
@@ -92,43 +81,92 @@ def update_callback(msg):
         gp.orientation.z = q[2]
         gp.orientation.w = q[3]
         publish_pose_as_transform(gp, 'panda_link0', 'G', 0.05)
+        self.best_grasp = gp
+
+    def __trigger_update(self):
+        self.update_pub.publish(Empty())
+
+    def __velo_control_loop(self):
+        ctr = 0
+        r = rospy.Rate(self.curr_velocity_publish_rate)
+        while not rospy.is_shutdown() and not DIE:
+            ctr += 1
+            if ctr >= self.curr_velocity_publish_rate/self.update_rate:
+                ctr = 0
+            self.__trigger_update()
+
+            # End effector Z height
+            if self.robot_state.O_T_EE[-2] < 0.2:
+                self.stop()
+                return True
+
+            # Cartesian Contact
+            if any(self.robot_state.cartesian_contact):
+                self.stop()
+                rospy.logerr('Detected cartesian contact during velocity control loop.')
+                return False
+
+            self.curr_velo_pub.publish(self.curr_velo)
+            r.sleep()
+
+        return not rospy.is_shutdown()
+
+    def __execute_grasp(self, grasp_pose):
+            if raw_input('Looks Good? Y/n') not in ['', 'y', 'Y']:
+                return
+
+            self.cs.switch_controller('moveit')
+
+            # Offset for initial pose.
+            initial_offset = 0.15
+            link_ee_offset = 0.138
+            grasp_pose.position.z = max(grasp_pose.position.z - 0.01, 0.01)
+            grasp_pose.position.z += initial_offset + link_ee_offset  # Offset from end efector position to
+
+            self.pc.goto_pose(grasp_pose, velocity=0.25)
+
+            # Reset the position
+            grasp_pose.position.z -= initial_offset + link_ee_offset
+            #self.pc.goto_pose_cartesian(grasp_pose, velocity=0.1)
+
+            self.cs.switch_controller('velocity')
+            v = Twist()
+            v.linear.z = -0.05
+            while self.robot_state.O_T_EE[-2] > grasp_pose.position.z and not any(self.robot_state.cartesian_contact):
+                self.curr_velo_pub.publish(v)
+                rospy.sleep(0.01)
+            v.linear.z = 0
+            self.curr_velo_pub.publish(v)
+
+            # close the fingers.
+            rospy.sleep(0.5)
+            return self.pc.grasp(0)
+
+    def stop(self):
+        self.pc.stop()
+        self.curr_velo = Twist()
+        self.curr_velo_pub.publish(self.curr_velo)
+
+    def go(self):
+        while not rospy.is_shutdown() and not DIE:
+            self.cs.switch_controller('moveit')
+            self.pc.goto_named_pose('grip_ready', velocity=0.5)
+            self.pc.set_gripper(0.1)
+
+            self.cs.switch_controller('velocity')
+            raw_input('Press Enter to Start.')
+            self.entropy_reset_srv.call()
+            self.__trigger_update()
+
+            # Perform the velocity control portion.
+            success = self.__velo_control_loop()
+            if not success:
+                continue
+
+            self.__execute_grasp(self.best_grasp)
+
 
 if __name__ == '__main__':
-    PREGRASP_POSE = [0.0, -0.45, 0.55, 2**0.5/2, -2**0.5/2, 0, 0]
-
-    rospy.init_node('panda_open_loop_grasp', anonymous=True)
-
-    next_view_srv = rospy.ServiceProxy('/grasp_entropy_node/update_grid', NextViewpoint)
-
-    raw_input('Press Enter to Start.')
-
-    move_to_pose_velo(PREGRASP_POSE)
-    exit()
-
-    r = rospy.Rate(100)
-
-    p = rospy.Publisher('/cartesian_velocity_node_controller/cartesian_velocity', geometry_msgs.msg.Twist, queue_size=1)
-    s = rospy.Subscriber('~/update', std_msgs.msg.Empty, update_callback, queue_size=1)
-    p2 = rospy.Publisher('~/update', std_msgs.msg.Empty, queue_size=1)
-
-    i = 0
-
-    velo = geometry_msgs.msg.Twist()
-
-    while not rospy.is_shutdown():
-        i += 1
-        curr_pose = current_robot_pose('panda_link0', 'panda_hand')
-        if i >= 25:
-            i = 0
-            p2.publish(std_msgs.msg.Empty())
-
-        if curr_pose.position.z < 0.25:
-            velo.linear.x = 0
-            velo.linear.y = 0
-            velo.linear.z = 0
-            p.publish(velo)
-            break
-
-        p.publish(velo)
-
-        r.sleep()
+    rospy.init_node('ap_grasping_velo')
+    agc = ActiveGraspController()
+    agc.go()
