@@ -25,6 +25,7 @@ from mvp_grasping.srv import NextViewpoint, NextViewpointResponse
 from geometry_msgs.msg import Point
 from sensor_msgs.msg import Image, CameraInfo
 from std_msgs.msg import Float32MultiArray
+from std_srvs.srv import Empty as EmptySrv, EmptyResponse as EmptySrvResponse
 
 import cv_bridge
 bridge = cv_bridge.CvBridge()
@@ -43,26 +44,19 @@ class ViewpointEntropyCalculator:
         self.height = (rospy.get_param('~height/z1'), rospy.get_param('~height/z2'))
 
         # Create a GridWorld where we will store values.
-        gw_bounds = np.array([
+        self.gw_bounds = np.array([
             [rospy.get_param('~histogram/bounds/x1'), rospy.get_param('~histogram/bounds/y1')],
             [rospy.get_param('~histogram/bounds/x2'), rospy.get_param('~histogram/bounds/y2')]
         ])
-        gw_res = rospy.get_param('~histogram/resolution')
+        self.gw_res = rospy.get_param('~histogram/resolution')
 
-        self.gw = GridWorld(gw_bounds, gw_res)
-        self.gw.add_grid('visited', 0.0)
-        self.gw.add_grid('hist', 1.0, extra_dims=(self.hist_bins_a, self.hist_bins_q))
-
-        # self.gw.hist = np.zeros((self.gw.maps['count'].shape[0], self.gw.maps['count'].shape[1], self.hist_bins_a, self.hist_bins_q))
+        self.reset_gridworld(EmptySrv())
         self.hist_mean = 0
 
         # Useful meshgrid for distance calculations
         xs = np.arange(self.gw.bounds[0, 0], self.gw.bounds[1, 0], self.gw.res) + self.gw.res / 2
         ys = np.arange(self.gw.bounds[0, 1], self.gw.bounds[1, 1], self.gw.res) + self.gw.res / 2
         self._xv, self._yv = np.meshgrid(xs, ys)
-
-        # Track the position of the camera.
-        self.position_history = []
 
         # Get the camera parameters
         cam_info_topic = rospy.get_param('~camera/info_topic')
@@ -71,6 +65,7 @@ class ViewpointEntropyCalculator:
 
         self.img_pub = rospy.Publisher('~visualisation', Image, queue_size=1)
         rospy.Service('~update_grid', NextViewpoint, self.update_service_handler)
+        rospy.Service('~reset_grid', EmptySrv, self.reset_gridworld)
 
     def update_service_handler(self, req):
         depth_msg = rospy.wait_for_message('/camera/depth/image_meters/', Image)
@@ -185,8 +180,13 @@ class ViewpointEntropyCalculator:
 
         return ret
 
-    def reset():
-        pass
+    def reset_gridworld(self, req):
+        self.gw = GridWorld(self.gw_bounds, self.gw_res)
+        self.gw.add_grid('visited', 0.0)
+        self.gw.add_grid('hist', 1.0, extra_dims=(self.hist_bins_a, self.hist_bins_q))
+        self.position_history = []
+        return EmptySrvResponse()
+
 
 if __name__ == '__main__':
     rospy.init_node('grasp_entropy_node')
