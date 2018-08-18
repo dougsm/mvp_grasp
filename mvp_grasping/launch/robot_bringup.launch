@@ -8,6 +8,9 @@
     <arg name="robot_ip" value="$(arg robot_ip)" />
   </include>
 
+  <!-- Set some project specific defaults for the panda arm. -->
+  <node name="set_robot_defaults" pkg="franka_control_wrappers" type="set_panda_defaults.py" respawn="false" output="screen"/>
+
   <include file="$(find panda_moveit_config)/launch/panda_moveit.launch" />
   <include file="$(find panda_moveit_config)/launch/moveit_rviz.launch" />
 

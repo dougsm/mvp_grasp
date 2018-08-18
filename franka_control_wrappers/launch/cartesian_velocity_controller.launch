@@ -4,7 +4,7 @@
   <arg name="stopped" default="false" />
 
   <rosparam command="load" file="$(find franka_control_wrappers)/config/franka_controllers.yaml" />
-  <node unless="$(arg stopped)" name="controller_spawner2_cv" pkg="controller_manager" type="spawner" respawn="false" output="screen"  args="cartesian_velocity_node_controller"/>
+  <node unless="$(arg stopped)" name="controller_spawner_cv" pkg="controller_manager" type="spawner" respawn="false" output="screen"  args="cartesian_velocity_node_controller"/>
   <node if="$(arg stopped)" name="controller_spawner_cv" pkg="controller_manager" type="spawner" respawn="false" output="screen"  args="--stopped cartesian_velocity_node_controller"/>
 
 </launch>
