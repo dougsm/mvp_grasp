@@ -95,10 +95,6 @@ def update_histogram(data, ids, histogram):
 
 
 def update_histogram_angle(data, angle, ids, histogram):
-    # ids_r = ids[:, 0] + \
-    #         ids[:, 1] * histogram.shape[0] + \
-    #         np.floor(angle/np.pi * histogram.shape[2]).astype(np.int) * histogram.shape[0] * histogram.shape[1] + \
-    #         np.floor(data * histogram.shape[3]).astype(np.int) * histogram.shape[0] * histogram.shape[1] * histogram.shape[2]
     ids_r = np.ravel_multi_index(
         (
             ids[:, 0],
