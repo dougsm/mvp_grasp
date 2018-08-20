@@ -20,7 +20,6 @@ from dougsm_helpers.ros_control import ControlSwitcher
 
 from mvp_grasping.srv import NextViewpoint, NextViewpointRequest
 
-DIE = False
 
 class ActiveGraspController:
     def __init__(self):
@@ -34,8 +33,9 @@ class ActiveGraspController:
         self.curr_velo_pub = rospy.Publisher('/cartesian_velocity_node_controller/cartesian_velocity', Twist, queue_size=1)
         self.curr_velo = Twist()
         self.best_grasp = Pose()
+        self.grasp_width = 0.07
 
-        self.update_rate = 4.0  # Hz
+        self.update_rate = 10.0  # Hz
         update_topic_name = '~/update'
         self.update_pub = rospy.Publisher(update_topic_name, Empty, queue_size=1)
         rospy.Subscriber(update_topic_name, Empty, self.__update_callback, queue_size=1)
@@ -46,16 +46,21 @@ class ActiveGraspController:
         self.pc = PandaCommander(group_name='panda_arm_hand')
 
         self.robot_state = None
+        self.ERROR_DETECTED = False
         rospy.Subscriber('/franka_state_controller/franka_states', FrankaState, self.__robot_state_callback, queue_size=1)
 
     def __robot_state_callback(self, msg):
         self.robot_state = msg
+        if any(self.robot_state.cartesian_collision):
+            if not self.ERROR_DETECTED:
+                rospy.logerr('Detected Cartesian Collision')
+            self.ERROR_DETECTED = True
         for s in FrankaErrors.__slots__:
             if getattr(msg.current_errors, s):
                 self.stop()
-                rospy.logerr('Robot Error Detected')
-                DIE = True
-                raise SystemExit()
+                if not self.ERROR_DETECTED:
+                    rospy.logerr('Robot Error Detected')
+                self.ERROR_DETECTED = True
 
     def __update_callback(self, msg):
         res = self.entropy_srv()
@@ -67,21 +72,23 @@ class ActiveGraspController:
         self.curr_velo.linear.y = delta.y * vscale
         self.curr_velo.linear.z = delta.z * vscale
 
-        # Publish pose.
-        gp = Pose()
-        gp.position.x = res.best_grasp.data[0]
-        gp.position.y = res.best_grasp.data[1]
-        gp.position.z = res.best_grasp.data[2]
-        ang = res.best_grasp.data[3]
-        if ang < 0:
-            ang += np.pi
-        q = tft.quaternion_from_euler(np.pi, 0, -1 * ang)
-        gp.orientation.x = q[0]
-        gp.orientation.y = q[1]
-        gp.orientation.z = q[2]
-        gp.orientation.w = q[3]
-        publish_pose_as_transform(gp, 'panda_link0', 'G', 0.05)
-        self.best_grasp = gp
+        if len(res.best_grasp.data) > 0:
+            # Publish pose.
+            gp = Pose()
+            gp.position.x = res.best_grasp.data[0]
+            gp.position.y = res.best_grasp.data[1]
+            gp.position.z = res.best_grasp.data[2]
+            ang = res.best_grasp.data[3]
+            # if ang < 0:
+            #     ang += np.pi
+            q = tft.quaternion_from_euler(np.pi, 0, ang - np.pi/2)
+            gp.orientation.x = q[0]
+            gp.orientation.y = q[1]
+            gp.orientation.z = q[2]
+            gp.orientation.w = q[3]
+            publish_pose_as_transform(gp, 'panda_link0', 'G', 0.05)
+            self.best_grasp = gp
+            self.grasp_width = res.best_grasp.data[4]
 
     def __trigger_update(self):
         self.update_pub.publish(Empty())
@@ -89,14 +96,17 @@ class ActiveGraspController:
     def __velo_control_loop(self):
         ctr = 0
         r = rospy.Rate(self.curr_velocity_publish_rate)
-        while not rospy.is_shutdown() and not DIE:
+        while not rospy.is_shutdown():
+            if self.ERROR_DETECTED:
+                return False
+
             ctr += 1
             if ctr >= self.curr_velocity_publish_rate/self.update_rate:
                 ctr = 0
             self.__trigger_update()
 
             # End effector Z height
-            if self.robot_state.O_T_EE[-2] < 0.2:
+            if self.robot_state.O_T_EE[-2] - self.best_grasp.position.z < 0.15:
                 self.stop()
                 return True
 
@@ -112,15 +122,15 @@ class ActiveGraspController:
         return not rospy.is_shutdown()
 
     def __execute_grasp(self, grasp_pose):
-            if raw_input('Looks Good? Y/n') not in ['', 'y', 'Y']:
-                return
+            # if raw_input('Looks Good? Y/n') not in ['', 'y', 'Y']:
+            #     return
 
             self.cs.switch_controller('moveit')
 
             # Offset for initial pose.
             initial_offset = 0.15
             link_ee_offset = 0.138
-            grasp_pose.position.z = max(grasp_pose.position.z - 0.01, 0.01)
+            grasp_pose.position.z = max(grasp_pose.position.z - 0.01, 0.015)
             grasp_pose.position.z += initial_offset + link_ee_offset  # Offset from end efector position to
 
             self.pc.goto_pose(grasp_pose, velocity=0.25)
@@ -129,10 +139,13 @@ class ActiveGraspController:
             grasp_pose.position.z -= initial_offset + link_ee_offset
             #self.pc.goto_pose_cartesian(grasp_pose, velocity=0.1)
 
+            print(self.grasp_width)
+            self.pc.set_gripper(self.grasp_width)
+
             self.cs.switch_controller('velocity')
             v = Twist()
             v.linear.z = -0.05
-            while self.robot_state.O_T_EE[-2] > grasp_pose.position.z and not any(self.robot_state.cartesian_contact):
+            while self.robot_state.O_T_EE[-2] > grasp_pose.position.z and not any(self.robot_state.cartesian_contact) and not self.ERROR_DETECTED:
                 self.curr_velo_pub.publish(v)
                 rospy.sleep(0.01)
             v.linear.z = 0
@@ -140,7 +153,14 @@ class ActiveGraspController:
 
             # close the fingers.
             rospy.sleep(0.5)
-            return self.pc.grasp(0)
+            self.pc.grasp(0, force=1)
+
+            # Check for collisions
+            if self.ERROR_DETECTED:
+                self.pc.recover()
+                self.ERROR_DETECTED = False
+
+            return True
 
     def stop(self):
         self.pc.stop()
@@ -148,10 +168,10 @@ class ActiveGraspController:
         self.curr_velo_pub.publish(self.curr_velo)
 
     def go(self):
-        while not rospy.is_shutdown() and not DIE:
+        while not rospy.is_shutdown():
             self.cs.switch_controller('moveit')
             self.pc.goto_named_pose('grip_ready', velocity=0.5)
-            self.pc.set_gripper(0.1)
+            self.pc.set_gripper(0.07)
 
             self.cs.switch_controller('velocity')
             raw_input('Press Enter to Start.')
@@ -161,9 +181,19 @@ class ActiveGraspController:
             # Perform the velocity control portion.
             success = self.__velo_control_loop()
             if not success:
+                rospy.sleep(1.0)
+                if self.ERROR_DETECTED:
+                    rospy.logerr('Recovering')
+                    self.pc.recover()
+                    rospy.logerr('Done')
+                    self.ERROR_DETECTED = False
                 continue
 
             self.__execute_grasp(self.best_grasp)
+            self.cs.switch_controller('moveit')
+            self.pc.goto_named_pose('grip_ready', velocity=0.5)
+            self.pc.goto_named_pose('drop_box', velocity=0.5)
+            self.pc.set_gripper(0.07)
 
 
 if __name__ == '__main__':

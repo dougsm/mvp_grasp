@@ -13,6 +13,8 @@ from moveit_commander.conversions import pose_to_list, list_to_pose
 
 import geometry_msgs.msg
 import franka_gripper.msg
+from franka_control.msg import ErrorRecoveryActionGoal
+from std_msgs.msg import Empty
 
 
 class PandaCommander(object):
@@ -23,6 +25,8 @@ class PandaCommander(object):
         self.groups = {}
         self.active_group = None
         self.set_group(group_name)
+
+        self.reset_publisher = rospy.Publisher('/franka_control/error_recovery/goal', ErrorRecoveryActionGoal, queue_size=1)
 
     def print_debug_info(self):
         if self.active_group:
@@ -129,7 +133,7 @@ class PandaCommander(object):
         client.send_goal(franka_gripper.msg.MoveGoal(width, speed))
         return client.wait_for_result()
 
-    def grasp(self, width=0, e_inner=0.1, e_outer=0.1, speed=0.1, force=25):
+    def grasp(self, width=0, e_inner=0.1, e_outer=0.1, speed=0.1, force=15):
         client = actionlib.SimpleActionClient('franka_gripper/grasp', franka_gripper.msg.GraspAction)
         client.wait_for_server()
         client.send_goal(
@@ -145,6 +149,10 @@ class PandaCommander(object):
     def stop(self):
         if self.active_group:
             self.active_group.stop()
+
+    def recover(self):
+        self.reset_publisher.publish(ErrorRecoveryActionGoal())
+        rospy.sleep(3.0)
 
 if __name__ == '__main__':
     rospy.init_node('panda_commander_test', anonymous=True)
