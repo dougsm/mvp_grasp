@@ -172,18 +172,22 @@ Processing enabled by this node:
       </node>
     </group>
 
+    <!-- Workaround for the autoexposure not being enabled by default https://github.com/intel-ros/realsense/issues/318 -->
+    <node pkg="dougsm_helpers" type="set_realsense_autoexposure.sh" name="set_realsense_autoexposure" />
+
   </group>
 
   <node pkg="nodelet" type="nodelet" name="standalone_nodelet"  args="manager"/>
 
   <node pkg="nodelet" type="nodelet" name="convert_depth_to_m"
         args="load depth_image_proc/convert_metric standalone_nodelet">
-        <remap from="image_raw" to="/camera/depth/image_rect_raw"/>
-        <remap from="image" to="/camera/depth/image_meters"/>
+        <remap from="image_raw" to="$(arg namespace)/depth/image_rect_raw"/>
+        <remap from="image" to="$(arg namespace)/depth/image_meters"/>
   </node>
 
-<!-- args="0.030 -0.020 0.066 3.1415 -1.571 0 /panda_hand /camera_link 100"  -->
-
   <node pkg="tf" type="static_transform_publisher" name="realsense_link_broadcaster"
-        args="0.040 -0.026 0.066 3.1415 -1.571 0 /panda_hand /camera_link 100" />
+        args="0.040 -0.0175 0.066 3.1415 -1.571 0 /panda_hand /camera_link 100" />
+
+
+
 </launch>
