@@ -13,12 +13,12 @@ MODEL_FILE = 'models/epoch_29_model.hdf5'
 model = load_model(path.join(path.dirname(__file__), MODEL_FILE))
 graph = tf.get_default_graph()
 
-def process_depth_image(depth, crop_size, out_size=300, return_mask=False):
+def process_depth_image(depth, crop_size, out_size=300, return_mask=False, crop_y_offset=0):
     imh, imw = depth.shape
 
     with TimeIt('1'):
         # Crop.
-        depth_crop = depth[(imh - crop_size) // 2:(imh - crop_size) // 2 + crop_size,
+        depth_crop = depth[(imh - crop_size) // 2 - crop_y_offset:(imh - crop_size) // 2 + crop_size - crop_y_offset,
                            (imw - crop_size) // 2:(imw - crop_size) // 2 + crop_size]
     # depth_nan_mask = np.isnan(depth_crop).astype(np.uint8)
 
@@ -77,7 +77,7 @@ def predict(depth, process_depth=True, crop_size=300, out_size=300, depth_nan_ma
     width_out = pred_out[3].squeeze() * 150.0  # Scaled 0-150:0-1
 
     # Filter the outputs.
-    points_out = ndimage.filters.gaussian_filter(points_out, 1.0)  # 3.0
+    points_out = ndimage.filters.gaussian_filter(points_out, 3.0)  # 3.0
     # ang_out = ndimage.filters.gaussian_filter(ang_out, 2.0)
 
     points_out = np.clip(points_out, 0.0, 1.0-1e-3)

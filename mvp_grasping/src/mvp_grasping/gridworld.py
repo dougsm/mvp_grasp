@@ -7,7 +7,7 @@ class GridWorld:
             raise ValueError('Please make sure bounds[0, :] < bounds[1, :]')
         self.bounds = bounds
         self.res = resolution
-        self.shape = np.ceil((bounds[1, :] - bounds[0, :])/resolution).astype(np.int)
+        self.shape = np.ceil((bounds[1, :] - bounds[0, :] - 1e-6)/resolution).astype(np.int)
         self.map_offset = bounds[0, :]/resolution * -1
         self.maps = {}
 
@@ -24,8 +24,8 @@ class GridWorld:
         """
         cell_ids = np.floor((pos / self.res) + self.map_offset).astype(np.int)
 
-        np.clip(cell_ids[:, 0], 0, self.shape[0]-1, cell_ids[:, 0])
-        np.clip(cell_ids[:, 1], 0, self.shape[1]-1, cell_ids[:, 1])
+        cell_ids[:, 0] = np.clip(cell_ids[:, 0], 0, self.shape[1]-1)
+        cell_ids[:, 1] = np.clip(cell_ids[:, 1], 0, self.shape[0]-1)
 
         # check_bounds = (cell_ids >= 0) & (cell_ids < self.shape)
         # if not np.all(check_bounds):

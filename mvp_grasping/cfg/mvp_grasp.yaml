@@ -1,19 +1,19 @@
 grasp_entropy_node:
     histogram:
         bounds:
-            x1: -0.2
-            y1: -0.7
-            x2: 0.2
-            y2: -0.3
+            x1: -0.16
+            y1: -0.66
+            x2: 0.16
+            y2: -0.34
         resolution: 0.005
         bins:
             quality: 10
             angle: 18
     cost:
-        dist_from_best_scale: 0.5
-        dist_from_best_gain: 0.1
-        dist_from_prev_view_scale: 0.1
-        dist_from_prev_view_gain: 0.0
+        dist_from_best_scale: 0.25
+        dist_from_best_gain: 0.7
+        dist_from_prev_view_scale: 0.05
+        dist_from_prev_view_gain: 0.05
     height:
         z1: 0.5
         z2: 0.2
@@ -23,4 +23,5 @@ grasp_entropy_node:
         camera_frame: camera_depth_optical_frame
         base_frame: panda_link0
         crop_size: 350
+        crop_y_offset: 40
         fov: 65.5
