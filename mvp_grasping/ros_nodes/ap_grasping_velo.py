@@ -93,6 +93,15 @@ class ActiveGraspController:
             self.best_grasp = gp
             self.grasp_width = res.best_grasp.data[4]
 
+            curr_R = np.array(self.robot_state.O_T_EE).reshape((4, 4)).T
+            cpq = tft.quaternion_from_matrix(curr_R)
+            dq = tft.quaternion_multiply(q, tft.quaternion_conjugate(cpq))
+            d_euler = tft.euler_from_quaternion(dq)
+            self.curr_velo.angular.z = (d_euler[2])
+
+        else:
+            self.curr_velo.angular.z = 0
+
     def __trigger_update(self):
         self.update_pub.publish(Empty())
 
@@ -110,7 +119,7 @@ class ActiveGraspController:
 
             # End effector Z height
             if self.robot_state.O_T_EE[-2] < 0.15: # - self.best_grasp.position.z < 0.15:
-                self.stop()
+                # self.stop()
                 return True
 
             # Cartesian Contact
