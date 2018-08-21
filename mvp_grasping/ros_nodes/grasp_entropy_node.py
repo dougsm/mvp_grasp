@@ -105,18 +105,20 @@ class ViewpointEntropyCalculator:
                 newpos_pixel = self.gw.pos_to_cell(np.array([[cam_p.x, cam_p.y]]))[0]
                 self.gw.visited[newpos_pixel[0], newpos_pixel[1]] = self.gw.visited.max() + 1
 
+                cq = camera_pose.orientation
+                camera_rot = tft.quaternion_matrix([cq.x, cq.y, cq.z, cq.w])[0:3, 0:3]
+
                 # Do grasp prediction
                 depth_crop, depth_nan_mask = process_depth_image(depth, self.img_crop_size, 300, return_mask=True, crop_y_offset=self.img_crop_y_offset)
                 points, angle, width_img, _ = predict(depth_crop, process_depth=False, depth_nan_mask=depth_nan_mask)
-                angle += np.pi/2
+                angle -= np.arcsin(camera_rot[0, 1])  # Correct for the rotation of the camera
+                angle = (angle + np.pi/2) % np.pi  # Wrap [0, pi]
 
                 # Convert to 3D positions.
                 imh, imw = depth.shape
                 x = ((np.vstack((np.linspace((imw - self.img_crop_size) // 2, (imw - self.img_crop_size) // 2 + self.img_crop_size, depth_crop.shape[1], np.float), )*depth_crop.shape[0]) - self.cam_K[0, 2])/self.cam_K[0, 0] * depth_crop).flatten()
                 y = ((np.vstack((np.linspace((imh - self.img_crop_size) // 2 - self.img_crop_y_offset, (imh - self.img_crop_size) // 2 + self.img_crop_size - self.img_crop_y_offset, depth_crop.shape[0], np.float), )*depth_crop.shape[1]).T - self.cam_K[1,2])/self.cam_K[1, 1] * depth_crop).flatten()
 
-                cq = camera_pose.orientation
-                camera_rot = tft.quaternion_matrix([cq.x, cq.y, cq.z, cq.w])[0:3, 0:3]
                 pos = np.dot(camera_rot, np.stack((x, y, depth_crop.flatten()))).T + np.array([[camera_pose.position.x, camera_pose.position.y, camera_pose.position.z]])
                 pos[depth_nan_mask.flatten() == 1, :] = 0  # Get rid of NaNs
                 pos[pos[:, 2] > 0.10, :] = 0  # Ignore obvious noise.
@@ -160,7 +162,7 @@ class ViewpointEntropyCalculator:
                 q_am_pos = (q_am_neigh[0], q_am_neigh[1])
 
                 best_grasp_hist = self.gw.hist[q_am[0], q_am[1], :, :]
-                angle_weights = np.sum(best_grasp_hist * weights.reshape((1, -1)), axis=1)#/(np.sum(best_grasp_hist, axis=1) + 1e-6)
+                angle_weights = np.sum(best_grasp_hist - 1 * weights.reshape((1, -1)), axis=1)#/(np.sum(best_grasp_hist, axis=1) + 1e-6)
                 ang_bins = np.arange(0.5/self.hist_bins_a, 1.0, 1/self.hist_bins_a) * np.pi
                 q_am_ang = np.arctan2(
                     np.sum(np.sin(ang_bins) * angle_weights),
