@@ -49,6 +49,11 @@ class ActiveGraspController:
         self.ERROR_DETECTED = False
         rospy.Subscriber('/franka_state_controller/franka_states', FrankaState, self.__robot_state_callback, queue_size=1)
 
+        self.pregrasp_pose = [(rospy.get_param('/grasp_entropy_node/histogram/bounds/x2') + rospy.get_param('/grasp_entropy_node/histogram/bounds/x1'))/2,
+                              (rospy.get_param('/grasp_entropy_node/histogram/bounds/y2') + rospy.get_param('/grasp_entropy_node/histogram/bounds/y1'))/2 + 0.08,
+                              0.55,
+                              2**0.5/2, -2**0.5/2, 0, 0]
+
     def __robot_state_callback(self, msg):
         self.robot_state = msg
         if any(self.robot_state.cartesian_collision):
@@ -66,7 +71,7 @@ class ActiveGraspController:
         res = self.entropy_srv()
         delta = res.viewpoint
 
-        vscale = 2
+        vscale = 3
 
         self.curr_velo.linear.x = delta.x * vscale
         self.curr_velo.linear.y = delta.y * vscale
@@ -79,8 +84,6 @@ class ActiveGraspController:
             gp.position.y = res.best_grasp.data[1]
             gp.position.z = res.best_grasp.data[2]
             ang = res.best_grasp.data[3]
-            # if ang < 0:
-            #     ang += np.pi
             q = tft.quaternion_from_euler(np.pi, 0, ang - np.pi/2)
             gp.orientation.x = q[0]
             gp.orientation.y = q[1]
@@ -106,7 +109,7 @@ class ActiveGraspController:
             self.__trigger_update()
 
             # End effector Z height
-            if self.robot_state.O_T_EE[-2] - self.best_grasp.position.z < 0.15:
+            if self.robot_state.O_T_EE[-2] < 0.15: # - self.best_grasp.position.z < 0.15:
                 self.stop()
                 return True
 
@@ -124,13 +127,16 @@ class ActiveGraspController:
     def __execute_grasp(self, grasp_pose):
             # if raw_input('Looks Good? Y/n') not in ['', 'y', 'Y']:
             #     return
+            if self.grasp_width == 0.0:
+                # Something is wrong.
+                return False
 
             self.cs.switch_controller('moveit')
 
             # Offset for initial pose.
-            initial_offset = 0.15
+            initial_offset = 0.1
             link_ee_offset = 0.138
-            grasp_pose.position.z = max(grasp_pose.position.z - 0.01, 0.015)
+            grasp_pose.position.z = max(grasp_pose.position.z - 0.01, 0.025)  # 0.021 = collision with ground
             grasp_pose.position.z += initial_offset + link_ee_offset  # Offset from end efector position to
 
             self.pc.goto_pose(grasp_pose, velocity=0.25)
@@ -171,7 +177,8 @@ class ActiveGraspController:
         while not rospy.is_shutdown():
             self.cs.switch_controller('moveit')
             self.pc.goto_named_pose('grip_ready', velocity=0.5)
-            self.pc.set_gripper(0.07)
+            self.pc.goto_pose(self.pregrasp_pose, velocity=1.0)
+            self.pc.set_gripper(0.1)
 
             self.cs.switch_controller('velocity')
             raw_input('Press Enter to Start.')
@@ -189,11 +196,12 @@ class ActiveGraspController:
                     self.ERROR_DETECTED = False
                 continue
 
-            self.__execute_grasp(self.best_grasp)
-            self.cs.switch_controller('moveit')
-            self.pc.goto_named_pose('grip_ready', velocity=0.5)
-            self.pc.goto_named_pose('drop_box', velocity=0.5)
-            self.pc.set_gripper(0.07)
+            gs = self.__execute_grasp(self.best_grasp)
+            if gs:
+                self.cs.switch_controller('moveit')
+                self.pc.goto_named_pose('grip_ready', velocity=0.5)
+                self.pc.goto_named_pose('drop_box', velocity=0.5)
+                self.pc.set_gripper(0.07)
 
 
 if __name__ == '__main__':
