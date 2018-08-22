@@ -1,17 +1,17 @@
 grasp_entropy_node:
     histogram:
         bounds:
-            x1: -0.18
-            y1: -0.68
-            x2: 0.18
-            y2: -0.32
+            x1: -0.17
+            y1: -0.67
+            x2: 0.17
+            y2: -0.33
         resolution: 0.005
         bins:
             quality: 10
             angle: 18
     cost:
         dist_from_best_scale: 0.2
-        dist_from_best_gain: 0.2
+        dist_from_best_gain: 0.25
         dist_from_prev_view_scale: 0.05
         dist_from_prev_view_gain: 0.025
     height:
