@@ -23,7 +23,7 @@ from mvp_grasping.grasp_stats import update_batch, update_histogram_angle
 from mvp_grasping.gridworld import GridWorld
 from dougsm_helpers.gridshow import gridshow
 
-from mvp_grasping.srv import NextViewpoint, NextViewpointResponse
+from mvp_grasping.srv import NextViewpoint, NextViewpointResponse, AddFailurePoint, AddFailurePointResponse
 from geometry_msgs.msg import Point
 from sensor_msgs.msg import Image, CameraInfo
 from std_msgs.msg import Float32MultiArray
@@ -68,6 +68,7 @@ class ViewpointEntropyCalculator:
         self.img_pub = rospy.Publisher('~visualisation', Image, queue_size=1)
         rospy.Service('~update_grid', NextViewpoint, self.update_service_handler)
         rospy.Service('~reset_grid', EmptySrv, self.reset_gridworld)
+        rospy.Service('~reset_grid', AddFailurePoint, self.add_failure_point_callback)
 
         self.base_frame = rospy.get_param('~camera/base_frame')
         self.camera_frame = rospy.get_param('~camera/camera_frame')
@@ -141,6 +142,12 @@ class ViewpointEntropyCalculator:
                 hist_mean[-1, :] = 0
                 hist_mean[:, 0] = 0
                 hist_mean[:, -1] = 0
+                hist_mean -= self.gw.failures
+
+                # d_from_robot = np.sqrt((self._xv - cam_p.x)**2 + (self._yv - cam_p.y)**2)
+                # d_from_robot_scalar = (d_from_robot - d_from_robot.min())/(d_from_robot.max() - d_from_robot.min())
+                # hist_mean *= (1 - d_from_robot_scalar) * 0.2 + 0.8
+
                 q_am = np.unravel_index(np.argmax(hist_mean), hist_mean.shape)
                 # q_am_pos = self.gw.cell_to_pos([q_am])[0]
 
@@ -158,8 +165,8 @@ class ViewpointEntropyCalculator:
                                             ])
                 neighbour_weights = hist_mean[conn_neighbours[:, 0], conn_neighbours[:, 1]]
                 q_am_neigh = self.gw.cell_to_pos(conn_neighbours)
-                q_am_neigh = np.average(q_am_neigh, weights=neighbour_weights, axis=0)
-                q_am_pos = (q_am_neigh[0], q_am_neigh[1])
+                q_am_neigh_avg = np.average(q_am_neigh, weights=neighbour_weights, axis=0)
+                q_am_pos = (q_am_neigh_avg[0], q_am_neigh_avg[1])
 
                 best_grasp_hist = self.gw.hist[q_am[0], q_am[1], :, :]
                 angle_weights = np.sum(best_grasp_hist - 1 * weights.reshape((1, -1)), axis=1)#/(np.sum(best_grasp_hist, axis=1) + 1e-6)
@@ -176,7 +183,7 @@ class ViewpointEntropyCalculator:
                 hist_p = hist_sum_q / np.expand_dims(np.sum(hist_sum_q, axis=2) + 1e-6, -1)
                 hist_ent = -np.sum(hist_p * np.log(hist_p+1e-6), axis=2)
 
-                fov = int(cam_p.z * np.tan(self.cam_fov*self.img_crop_size/depth.shape[0] / 180.0 * np.pi) / self.gw.res)  # Field of view in gridworld cells
+                fov = int(cam_p.z * 2 * np.tan(self.cam_fov*self.img_crop_size/depth.shape[0]/2.0 / 180.0 * np.pi) / self.gw.res)  # Field of view in gridworld cells
                 exp_inf_gain = gaussian_filter(hist_ent, fov/6, mode='nearest', truncate=3)
 
             with TimeIt('Calculate Travel Cost'):
@@ -187,6 +194,7 @@ class ViewpointEntropyCalculator:
                 # Distance from best detected grasp.
                 d_from_best_q = np.sqrt((self._xv - q_am_pos[0])**2 + (self._yv - q_am_pos[1])**2)  # Cost of moving away from the best grasp.
                 height_weight = (cam_p.z - self.height[1])/(self.height[0]-self.height[1]) + 1e-2
+                height_weight = max(min(height_weight, 1.0), 0.0)
                 best_cost = (d_from_best_q / (self.dist_from_best_scale * height_weight)) * self.dist_from_best_gain
 
                 # Distance from previous viewpoints.
@@ -201,7 +209,7 @@ class ViewpointEntropyCalculator:
 
                 # Generate Command
                 exp_inf_gain_mask = exp_inf_gain.copy()
-                exp_inf_gain_mask[d_from_robot > 0.05] = exp_inf_gain.min()
+                exp_inf_gain_mask[d_from_robot > 0.10] = exp_inf_gain.min()
                 ig_am = np.unravel_index(np.argmax(exp_inf_gain_mask), exp_inf_gain.shape)
                 maxpos = self.gw.cell_to_pos([ig_am])[0]
                 diff = maxpos - np.array([cam_p.x, cam_p.y])
@@ -209,16 +217,32 @@ class ViewpointEntropyCalculator:
                 if np.linalg.norm(diff) > move_amt:
                     diff = diff/np.linalg.norm(diff) * move_amt
 
+                # diff_q = q_am_pos - np.array([cam_p.x, cam_p.y])
+                # if np.linalg.norm(diff_q) > move_amt:
+                #     diff_q = diff_q/np.linalg.norm(diff_q) * move_amt
+                #
+                # TimeIt.print_output = False
+                # gamma = 10
+                # diff = height_weight**gamma * diff + (1 - height_weight**gamma) * diff_q
+
+            # with TimeIt('Normals'):
+            #     pts = np.vstack((q_am_neigh.T, self.gw.depth_mean[conn_neighbours[:, 0], conn_neighbours[:, 1]]))
+            #     C = np.cov(pts)
+            #     eigvals, v = np.linalg.eig(C)
+            #     i = np.argmin(eigvals)
+            #     normals = v[:, i]/np.linalg.norm(v[:, i]) * (-1 if v[2, i] < 0 else 1)
+            #     print(normals)
+
             with TimeIt('Response'):
                 ret = NextViewpointResponse()
 
                 p = Point()
                 p.x = diff[0]
                 p.y = diff[1]
-                p.z = -1 * ((move_amt - np.linalg.norm(diff))/move_amt * 0.01 + 0.01)
+                p.z = -1 * (np.sqrt(move_amt**2 - p.x**2 - p.y**2))
                 ret.viewpoint = p
                 ret.best_grasp = Float32MultiArray()
-                ret.best_grasp.data = [q_am_pos[0], q_am_pos[1], q_am_dep, q_am_ang, q_am_wid]
+                ret.best_grasp.data = [q_am_pos[0], q_am_pos[1], q_am_dep, q_am_ang, q_am_wid]  # + list(normals)
 
                 show = gridshow('Display',
                          [cv2.resize(points, hist_ent.shape), hist_mean, hist_ent, np.exp(exp_inf_gain), best_cost, self.gw.visited],
@@ -240,9 +264,15 @@ class ViewpointEntropyCalculator:
         self.gw.add_grid('width_mean', 0.0)
         self.gw.add_grid('width_var', 0.0)
         self.gw.add_grid('count', 0.0)
+        self.gw.add_grid('failures', 0.0)
         self.position_history = []
         return EmptySrvResponse()
 
+    def add_failure_point_callback(self, req):
+        new_fp = np.zeros_like(self.gw.failures)
+        cell_id = self.gw.pos_to_cell(np.array([[req.point.x, req.point.y]]))[0]
+        new_fp[cell_id[0], cell_id[1]] = 1.0
+        self.gw.failures += gaussian_filter(new_fp, 0.01/self.gw.res, mode='nearest', truncate=3)
 
 if __name__ == '__main__':
     rospy.init_node('grasp_entropy_node')
