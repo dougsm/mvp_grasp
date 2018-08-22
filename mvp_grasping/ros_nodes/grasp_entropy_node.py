@@ -54,6 +54,8 @@ class ViewpointEntropyCalculator:
 
         self.reset_gridworld(EmptySrv())
         self.hist_mean = 0
+        self.fgw = GridWorld(self.gw_bounds, self.gw_res)
+        self.fgw.add_grid('failures', 0.0)
 
         # Useful meshgrid for distance calculations
         xs = np.arange(self.gw.bounds[0, 0], self.gw.bounds[1, 0] - 1e-6, self.gw.res) + self.gw.res / 2
@@ -68,7 +70,7 @@ class ViewpointEntropyCalculator:
         self.img_pub = rospy.Publisher('~visualisation', Image, queue_size=1)
         rospy.Service('~update_grid', NextViewpoint, self.update_service_handler)
         rospy.Service('~reset_grid', EmptySrv, self.reset_gridworld)
-        rospy.Service('~reset_grid', AddFailurePoint, self.add_failure_point_callback)
+        rospy.Service('~add_failure_point', AddFailurePoint, self.add_failure_point_callback)
 
         self.base_frame = rospy.get_param('~camera/base_frame')
         self.camera_frame = rospy.get_param('~camera/camera_frame')
@@ -142,14 +144,15 @@ class ViewpointEntropyCalculator:
                 hist_mean[-1, :] = 0
                 hist_mean[:, 0] = 0
                 hist_mean[:, -1] = 0
-                hist_mean -= self.gw.failures
+                hist_mean -= self.fgw.failures
+                hist_mean = np.clip(hist_mean, 0.0, 1.0)
 
                 # d_from_robot = np.sqrt((self._xv - cam_p.x)**2 + (self._yv - cam_p.y)**2)
                 # d_from_robot_scalar = (d_from_robot - d_from_robot.min())/(d_from_robot.max() - d_from_robot.min())
                 # hist_mean *= (1 - d_from_robot_scalar) * 0.2 + 0.8
 
                 q_am = np.unravel_index(np.argmax(hist_mean), hist_mean.shape)
-                # q_am_pos = self.gw.cell_to_pos([q_am])[0]
+                q_am_pos = self.gw.cell_to_pos([q_am])[0]
 
                 # Interpolate position between the nearest neighbours.
                 q_ama = np.array(q_am)
@@ -166,7 +169,7 @@ class ViewpointEntropyCalculator:
                 neighbour_weights = hist_mean[conn_neighbours[:, 0], conn_neighbours[:, 1]]
                 q_am_neigh = self.gw.cell_to_pos(conn_neighbours)
                 q_am_neigh_avg = np.average(q_am_neigh, weights=neighbour_weights, axis=0)
-                q_am_pos = (q_am_neigh_avg[0], q_am_neigh_avg[1])
+                # q_am_pos = (q_am_neigh_avg[0], q_am_neigh_avg[1])
 
                 best_grasp_hist = self.gw.hist[q_am[0], q_am[1], :, :]
                 angle_weights = np.sum(best_grasp_hist - 1 * weights.reshape((1, -1)), axis=1)#/(np.sum(best_grasp_hist, axis=1) + 1e-6)
@@ -245,7 +248,7 @@ class ViewpointEntropyCalculator:
                 ret.best_grasp.data = [q_am_pos[0], q_am_pos[1], q_am_dep, q_am_ang, q_am_wid]  # + list(normals)
 
                 show = gridshow('Display',
-                         [cv2.resize(points, hist_ent.shape), hist_mean, hist_ent, np.exp(exp_inf_gain), best_cost, self.gw.visited],
+                         [cv2.resize(points, hist_ent.shape), hist_mean, hist_ent, np.exp(exp_inf_gain), self.fgw.failures, self.gw.visited],
                          [None, None, None, None, None, None],
                          [cv2.COLORMAP_BONE] + [cv2.COLORMAP_JET, ] * 4 + [cv2.COLORMAP_BONE],
                          3,
@@ -264,15 +267,16 @@ class ViewpointEntropyCalculator:
         self.gw.add_grid('width_mean', 0.0)
         self.gw.add_grid('width_var', 0.0)
         self.gw.add_grid('count', 0.0)
-        self.gw.add_grid('failures', 0.0)
         self.position_history = []
         return EmptySrvResponse()
 
     def add_failure_point_callback(self, req):
-        new_fp = np.zeros_like(self.gw.failures)
+        new_fp = np.zeros_like(self.fgw.failures)
         cell_id = self.gw.pos_to_cell(np.array([[req.point.x, req.point.y]]))[0]
         new_fp[cell_id[0], cell_id[1]] = 1.0
-        self.gw.failures += gaussian_filter(new_fp, 0.01/self.gw.res, mode='nearest', truncate=3)
+        new_fp = gaussian_filter(new_fp, 1, mode='nearest', truncate=3)
+        self.fgw.failures = 0.5*self.fgw.failures + 0.5* new_fp/new_fp.max()
+        return AddFailurePointResponse()
 
 if __name__ == '__main__':
     rospy.init_node('grasp_entropy_node')
