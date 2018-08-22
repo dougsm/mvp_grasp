@@ -20,7 +20,7 @@ from dougsm_helpers.tf_helpers import current_robot_pose, publish_tf_quaterion_a
 from dougsm_helpers.timeit import TimeIt
 from dougsm_helpers.ros_control import ControlSwitcher
 
-from mvp_grasping.srv import NextViewpoint, NextViewpointRequest
+from mvp_grasping.srv import NextViewpoint, NextViewpointRequest, AddFailurePoint, AddFailurePointRequest
 
 
 class ActiveGraspController:
@@ -30,6 +30,8 @@ class ActiveGraspController:
         self.entropy_srv = rospy.ServiceProxy(entropy_node_name + '/update_grid', NextViewpoint)
         rospy.wait_for_service(entropy_node_name + '/reset_grid')
         self.entropy_reset_srv = rospy.ServiceProxy(entropy_node_name + '/reset_grid', EmptySrv)
+        rospy.wait_for_service(entropy_node_name + '/add_failure_point')
+        self.add_failure_point_srv = rospy.ServiceProxy(entropy_node_name + '/add_failure_point', AddFailurePoint)
 
         self.curr_velocity_publish_rate = 100.0  # Hz
         self.curr_velo_pub = rospy.Publisher('/cartesian_velocity_node_controller/cartesian_velocity', Twist, queue_size=1)
@@ -37,6 +39,7 @@ class ActiveGraspController:
         self.best_grasp = Pose()
         # self.grasp_normal = np.array([0, 0, 1])
         self.grasp_width = 0.07
+        self._in_velo_loop = False
 
         self.update_rate = 10.0  # Hz
         update_topic_name = '~/update'
@@ -71,6 +74,9 @@ class ActiveGraspController:
                 self.ERROR_DETECTED = True
 
     def __update_callback(self, msg):
+        if not self._in_velo_loop:
+            # Stop the callback lagging behind
+            return
         res = self.entropy_srv()
         delta = res.viewpoint
 
@@ -171,7 +177,7 @@ class ActiveGraspController:
             # n = np.dot(tft.quaternion_matrix([o.x, o.y, o.z, o.w]), np.array([[0, 0, initial_offset + link_ee_offset, 0]]).T).flatten()
             # angled_offset = n * -1
 
-            grasp_pose.position.z = max(grasp_pose.position.z - 0.01, 0.025)  # 0.021 = collision with ground
+            grasp_pose.position.z = max(grasp_pose.position.z - 0.01, 0.026)  # 0.021 = collision with ground
             grasp_pose.position.z += initial_offset + link_ee_offset  # Offset from end efector position to
             # grasp_pose.position.x += angled_offset[0]
             # grasp_pose.position.y += angled_offset[1]
@@ -201,14 +207,16 @@ class ActiveGraspController:
             v.linear.z = 0
             self.curr_velo_pub.publish(v)
 
-            # close the fingers.
-            rospy.sleep(0.2)
-            self.pc.grasp(0, force=1)
-
             # Check for collisions
             if self.ERROR_DETECTED:
                 self.pc.recover()
                 self.ERROR_DETECTED = False
+                return False
+
+            # close the fingers.
+            rospy.sleep(0.2)
+            self.pc.grasp(0, force=1)
+
 
             return True
 
@@ -239,7 +247,9 @@ class ActiveGraspController:
 
             t0 = time.time()
             # Perform the velocity control portion.
+            self._in_velo_loop = True
             success = self.__velo_control_loop()
+            self._in_velo_loop = False
             if not success:
                 rospy.sleep(1.0)
                 if self.ERROR_DETECTED:
@@ -249,7 +259,7 @@ class ActiveGraspController:
                     self.ERROR_DETECTED = False
                 continue
 
-            gs = self.__execute_grasp(self.best_grasp)
+            grasp_ret = gs = self.__execute_grasp(self.best_grasp)
             t1 = time.time()
             if gs:
                 self.cs.switch_controller('moveit')
@@ -257,10 +267,16 @@ class ActiveGraspController:
                 self.pc.goto_named_pose('drop_box', velocity=0.25)
                 self.pc.set_gripper(0.07)
 
-            success = raw_input('Success? ')
-            with open('/home/acrv/doug_logs/%s.txt' % run_name, 'a') as f:
-                f.write('%d\t%s\t%f\n' % (i, success, t1-t0))
-            i += 1
+            if grasp_ret:
+                success = raw_input('Success? ')
+                if success == '0':
+                    m = AddFailurePointRequest()
+                    m.point.x = self.best_grasp.position.x
+                    m.point.y = self.best_grasp.position.y
+                    self.add_failure_point_srv.call(m)
+                with open('/home/acrv/doug_logs/%s.txt' % run_name, 'a') as f:
+                    f.write('%d\t%s\t%f\n' % (i, success, t1-t0))
+                i += 1
 
 
 if __name__ == '__main__':
