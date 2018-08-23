@@ -38,7 +38,7 @@ class ActiveGraspController:
         self.curr_velo = Twist()
         self.best_grasp = Pose()
         # self.grasp_normal = np.array([0, 0, 1])
-        self.grasp_width = 0.07
+        self.grasp_width = 0.10
         self._in_velo_loop = False
 
         self.update_rate = 10.0  # Hz
@@ -215,8 +215,11 @@ class ActiveGraspController:
 
             # close the fingers.
             rospy.sleep(0.2)
-            self.pc.grasp(0, force=1)
+            self.pc.grasp(0, force=2)
 
+            if self.ERROR_DETECTED:
+                self.pc.recover()
+                self.ERROR_DETECTED = False
 
             return True
 
