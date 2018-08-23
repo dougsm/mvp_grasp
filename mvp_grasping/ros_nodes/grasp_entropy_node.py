@@ -169,15 +169,22 @@ class ViewpointEntropyCalculator:
                 neighbour_weights = hist_mean[conn_neighbours[:, 0], conn_neighbours[:, 1]]
                 q_am_neigh = self.gw.cell_to_pos(conn_neighbours)
                 q_am_neigh_avg = np.average(q_am_neigh, weights=neighbour_weights, axis=0)
-                # q_am_pos = (q_am_neigh_avg[0], q_am_neigh_avg[1])
+                q_am_pos = (q_am_neigh_avg[0], q_am_neigh_avg[1])
 
-                best_grasp_hist = self.gw.hist[q_am[0], q_am[1], :, :]
-                angle_weights = np.sum(best_grasp_hist - 1 * weights.reshape((1, -1)), axis=1)#/(np.sum(best_grasp_hist, axis=1) + 1e-6)
-                ang_bins = np.arange(0.5/self.hist_bins_a, 1.0, 1/self.hist_bins_a) * np.pi
+                # best_grasp_hist = self.gw.hist[q_am[0], q_am[1], :, :]
+                best_grasp_hist = self.gw.hist[conn_neighbours[:, 0], conn_neighbours[:, 1], :, :]
+                print(best_grasp_hist.shape)
+                angle_weights = np.sum(best_grasp_hist - 1 * weights.reshape((1, 1, -1)), axis=2)
+                ang_bins = (np.arange(0.5/self.hist_bins_a, 1.0, 1/self.hist_bins_a) * np.pi).reshape(1, -1)
+                print(angle_weights.shape)
+                print(ang_bins.shape)
                 q_am_ang = np.arctan2(
-                    np.sum(np.sin(ang_bins) * angle_weights),
-                    np.sum(np.cos(ang_bins) * angle_weights)
+                    np.sum(np.sin(ang_bins) * angle_weights * neighbour_weights.reshape(-1, 1)),
+                    np.sum(np.cos(ang_bins) * angle_weights * neighbour_weights.reshape(-1, 1))
                 ) - np.pi/2
+                print(q_am_ang)
+                # q_am_ang = np.average(q_am_ang, weights=neighbour_weights)
+                # print(q_am_ang)
 
                 q_am_dep = self.gw.depth_mean[q_am]
                 q_am_wid = self.gw.width_mean[q_am]
