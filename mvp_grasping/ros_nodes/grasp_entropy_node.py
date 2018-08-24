@@ -122,10 +122,12 @@ class ViewpointEntropyCalculator:
                 imh, imw = depth.shape
                 x = ((np.vstack((np.linspace((imw - self.img_crop_size) // 2, (imw - self.img_crop_size) // 2 + self.img_crop_size, depth_crop.shape[1], np.float), )*depth_crop.shape[0]) - self.cam_K[0, 2])/self.cam_K[0, 0] * depth_crop).flatten()
                 y = ((np.vstack((np.linspace((imh - self.img_crop_size) // 2 - self.img_crop_y_offset, (imh - self.img_crop_size) // 2 + self.img_crop_size - self.img_crop_y_offset, depth_crop.shape[0], np.float), )*depth_crop.shape[1]).T - self.cam_K[1,2])/self.cam_K[1, 1] * depth_crop).flatten()
-
                 pos = np.dot(camera_rot, np.stack((x, y, depth_crop.flatten()))).T + np.array([[camera_pose.position.x, camera_pose.position.y, camera_pose.position.z]])
+
+                # Clean the data a bit.
                 pos[depth_nan_mask.flatten() == 1, :] = 0  # Get rid of NaNs
-                pos[pos[:, 2] > 0.10, :] = 0  # Ignore obvious noise.
+                pos[pos[:, 2] > 0.12, :] = 0  # Ignore obvious noise.
+                pos[pos[:, 2] < 0.0, :] = 0  # Ignore obvious noise.
 
                 cell_ids = self.gw.pos_to_cell(pos[:, :2])
                 width_m =  2 / depth_crop * np.tan(self.cam_fov/300.0 * width_img / 2.0 / 180.0 * np.pi)
@@ -167,6 +169,8 @@ class ViewpointEntropyCalculator:
                                             q_ama + [1, 0],
                                             q_ama + [1, 1],
                                             ])
+                conn_neighbours = np.array([q_ama])  # Disable rounding
+
                 neighbour_weights = hist_mean[conn_neighbours[:, 0], conn_neighbours[:, 1]]
                 q_am_neigh = self.gw.cell_to_pos(conn_neighbours)
                 q_am_neigh_avg = np.average(q_am_neigh, weights=neighbour_weights, axis=0)
@@ -281,7 +285,7 @@ class ViewpointEntropyCalculator:
 
                 exp_inf_gain = (exp_inf_gain - exp_inf_gain.min())/(exp_inf_gain.max()-exp_inf_gain.min())*(exp_inf_gain_before.max()-exp_inf_gain_before.min())
                 show = gridshow('Display',
-                         [cv2.resize(points, hist_ent.shape), hist_mean, change_in_entropy, exp_inf_gain, exp_inf_gain_before, self.gw.visited],
+                         [cv2.resize(points, hist_ent.shape), hist_mean, kl_divergence, exp_inf_gain, exp_inf_gain_before, self.gw.visited],
                          [None, None, None, (exp_inf_gain.min(), exp_inf_gain_before.max()), (exp_inf_gain.min(), exp_inf_gain_before.max()), None],
                          [cv2.COLORMAP_BONE] + [cv2.COLORMAP_JET, ] * 4 + [cv2.COLORMAP_BONE],
                          3,
