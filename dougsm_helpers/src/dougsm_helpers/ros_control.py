@@ -24,7 +24,7 @@ class ControlSwitcher:
 
         res = self.switcher_srv(controller_switch_msg).ok
         if res:
-            rospy.loginfo('Successfully switched to controller %s (%s)' % (controller_name, self.controllers[controller_name]))
+            # rospy.loginfo('Successfully switched to controller %s (%s)' % (controller_name, self.controllers[controller_name]))
             return res
         else:
             return False

@@ -9,7 +9,7 @@ import time
 
 import numpy as np
 
-from std_msgs.msg import Empty
+from std_msgs.msg import Empty, Int16
 from geometry_msgs.msg import Twist, Pose
 from franka_msgs.msg import FrankaState, Errors as FrankaErrors
 from std_srvs.srv import Empty as EmptySrv
@@ -59,6 +59,18 @@ class ActiveGraspController:
                               (rospy.get_param('/grasp_entropy_node/histogram/bounds/y2') + rospy.get_param('/grasp_entropy_node/histogram/bounds/y1'))/2 + 0.08,
                               0.60,
                               2**0.5/2, -2**0.5/2, 0, 0]
+
+        self.last_weight = 0
+        self.__weight_increase_check()
+
+    def __weight_increase_check(self):
+        try:
+            w = rospy.wait_for_message('/scales/weight', Int16, timeout=2).data
+            increased = (w - 5) > self.last_weight
+            self.last_weight = w
+            return increased
+        except:
+            return raw_input('No weight. Success? [1/0]') == '1'
 
     def __robot_state_callback(self, msg):
         self.robot_state = msg
@@ -233,6 +245,7 @@ class ActiveGraspController:
         with open('/home/acrv/doug_logs/%s.txt' % run_name, 'w') as f:
             f.write('Grasp\tSuccess\tTime\n')
         i = 1
+
         raw_input('Press Enter to Start.')
         while not rospy.is_shutdown():
             self.cs.switch_controller('moveit')
@@ -266,17 +279,22 @@ class ActiveGraspController:
             t1 = time.time()
             if gs:
                 self.cs.switch_controller('moveit')
-                self.pc.goto_named_pose('grip_ready', velocity=0.25)
-                self.pc.goto_named_pose('drop_box', velocity=0.25)
+                self.pc.goto_named_pose('grip_ready', velocity=0.5)
+                self.pc.goto_named_pose('drop_box', velocity=0.5)
                 self.pc.set_gripper(0.07)
 
             if grasp_ret:
-                success = raw_input('Success? ')
-                if success == '0':
+                # success = raw_input('Success? ')
+                rospy.sleep(1.0)
+                success = self.__weight_increase_check()
+                if not success:
+                    rospy.logerr("Failed Grasp")
                     m = AddFailurePointRequest()
                     m.point.x = self.best_grasp.position.x
                     m.point.y = self.best_grasp.position.y
                     self.add_failure_point_srv.call(m)
+                else:
+                    rospy.logerr("Successful Grasp")
                 with open('/home/acrv/doug_logs/%s.txt' % run_name, 'a') as f:
                     f.write('%d\t%s\t%f\n' % (i, success, t1-t0))
                 i += 1
