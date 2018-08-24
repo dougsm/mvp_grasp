@@ -13,7 +13,7 @@ from scipy.ndimage.filters import gaussian_filter
 
 from skimage.feature import peak_local_max
 
-from dougsm_helpers.tf_helpers import current_robot_pose
+import dougsm_helpers.tf_helpers as tfh
 from tf import transformations as tft
 from dougsm_helpers.timeit import TimeIt
 
@@ -86,7 +86,7 @@ class ViewpointEntropyCalculator:
 
     def _depth_img_callback(self, msg):
         self.curr_img_time = time.time()
-        self.last_image_pose = current_robot_pose(self.base_frame, self.camera_frame)
+        self.last_image_pose = tfh.current_robot_pose(self.base_frame, self.camera_frame)
         self.curr_depth_img = bridge.imgmsg_to_cv2(msg)
 
     def update_service_handler(self, req):
@@ -109,8 +109,7 @@ class ViewpointEntropyCalculator:
                 newpos_pixel = self.gw.pos_to_cell(np.array([[cam_p.x, cam_p.y]]))[0]
                 self.gw.visited[newpos_pixel[0], newpos_pixel[1]] = self.gw.visited.max() + 1
 
-                cq = camera_pose.orientation
-                camera_rot = tft.quaternion_matrix([cq.x, cq.y, cq.z, cq.w])[0:3, 0:3]
+                camera_rot = tft.quaternion_matrix(tfh.quaternion_to_list(camera_pose.orientation))[0:3, 0:3]
 
                 # Do grasp prediction
                 depth_crop, depth_nan_mask = process_depth_image(depth, self.img_crop_size, 300, return_mask=True, crop_y_offset=self.img_crop_y_offset)
@@ -269,10 +268,7 @@ class ViewpointEntropyCalculator:
                 ret.best_grasp.pose.position.z = q_am_dep
 
                 q = tft.quaternion_from_euler(np.pi, 0, q_am_angle - np.pi/2)
-                ret.best_grasp.pose.orientation.x = q[0]
-                ret.best_grasp.pose.orientation.y = q[1]
-                ret.best_grasp.pose.orientation.z = q[2]
-                ret.best_grasp.pose.orientation.w = q[3]
+                ret.best_grasp.pose.orientation = tfh.quaternion_from_list(q)
 
                 ret.best_grasp.quality = hist_mean[q_am[0], q_am[1]]
                 ret.best_grasp.width = q_am_wid
