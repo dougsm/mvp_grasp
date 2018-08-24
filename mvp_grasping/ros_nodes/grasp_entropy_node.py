@@ -24,7 +24,7 @@ from mvp_grasping.gridworld import GridWorld
 from dougsm_helpers.gridshow import gridshow
 
 from mvp_grasping.srv import NextViewpoint, NextViewpointResponse, AddFailurePoint, AddFailurePointResponse
-from geometry_msgs.msg import Point
+from geometry_msgs.msg import Point, Twist
 from sensor_msgs.msg import Image, CameraInfo
 from std_msgs.msg import Float32MultiArray
 from std_srvs.srv import Empty as EmptySrv, EmptyResponse as EmptySrvResponse
@@ -32,6 +32,7 @@ from std_srvs.srv import Empty as EmptySrv, EmptyResponse as EmptySrvResponse
 import cv_bridge
 bridge = cv_bridge.CvBridge()
 
+TimeIt.print_output = False
 
 class ViewpointEntropyCalculator:
     def __init__(self):
@@ -102,7 +103,7 @@ class ViewpointEntropyCalculator:
                 depth = self.curr_depth_img.copy()
                 camera_pose = self.last_image_pose
                 cam_p = camera_pose.position
-                self.position_history.append(np.array([cam_p.x, cam_p.y, cam_p.z]))
+                self.position_history.append(np.array([cam_p.x, cam_p.y, cam_p.z, 0]))
 
                 # For display purposes.
                 newpos_pixel = self.gw.pos_to_cell(np.array([[cam_p.x, cam_p.y]]))[0]
@@ -135,7 +136,7 @@ class ViewpointEntropyCalculator:
 
 
             with TimeIt('Calculate Best Grasp'):
-                # Marginalise over all angles.
+                # Marginalise over all anglenp.sum(hist_p * np.log((hist_p + 1e-6)/(hist_pt1 + 1e-6)), axis=2)s.
                 hist_sum_q = np.sum(self.gw.hist, axis=2)
                 weights = np.arange(0.5/self.hist_bins_q, 1.0, 1/self.hist_bins_q)
                 hist_mean = np.sum(hist_sum_q * weights.reshape((1, 1, -1)), axis=2)/(np.sum(hist_sum_q, axis=2) + 1e-6)
@@ -173,16 +174,12 @@ class ViewpointEntropyCalculator:
 
                 # best_grasp_hist = self.gw.hist[q_am[0], q_am[1], :, :]
                 best_grasp_hist = self.gw.hist[conn_neighbours[:, 0], conn_neighbours[:, 1], :, :]
-                print(best_grasp_hist.shape)
                 angle_weights = np.sum(best_grasp_hist - 1 * weights.reshape((1, 1, -1)), axis=2)
                 ang_bins = (np.arange(0.5/self.hist_bins_a, 1.0, 1/self.hist_bins_a) * np.pi).reshape(1, -1)
-                print(angle_weights.shape)
-                print(ang_bins.shape)
                 q_am_ang = np.arctan2(
                     np.sum(np.sin(ang_bins) * angle_weights * neighbour_weights.reshape(-1, 1)),
                     np.sum(np.cos(ang_bins) * angle_weights * neighbour_weights.reshape(-1, 1))
                 ) - np.pi/2
-                print(q_am_ang)
                 # q_am_ang = np.average(q_am_ang, weights=neighbour_weights)
                 # print(q_am_ang)
 
@@ -192,9 +189,24 @@ class ViewpointEntropyCalculator:
             with TimeIt('Calculate Information Gain'):
                 hist_p = hist_sum_q / np.expand_dims(np.sum(hist_sum_q, axis=2) + 1e-6, -1)
                 hist_ent = -np.sum(hist_p * np.log(hist_p+1e-6), axis=2)
-
+                # Camera field of view in grid cells.
                 fov = int(cam_p.z * 2 * np.tan(self.cam_fov*self.img_crop_size/depth.shape[0]/2.0 / 180.0 * np.pi) / self.gw.res)  # Field of view in gridworld cells
-                exp_inf_gain = gaussian_filter(hist_ent, fov/6, mode='nearest', truncate=3)
+                exp_inf_gain = gaussian_filter(hist_ent, fov/6, truncate=3)
+
+                kl_divergence = np.sum(hist_p * np.log((hist_p+1e-6)/(self.gw.hist_p_prev+1e-6)), axis=2)
+                # exp_inf_gain = gaussian_filter(1-np.exp(-kl_divergence), fov/6, truncate=3)
+
+                hist_ent_prev = -np.sum(self.gw.hist_p_prev * np.log(self.gw.hist_p_prev+1e-6), axis=2)
+                change_in_entropy = np.abs(hist_ent_prev - hist_ent)
+                # exp_inf_gain = gaussian_filter(change_in_entropy, fov/6, truncate=3.0)
+
+                self.gw.hist_p_prev = hist_p
+                kl_divergence[0, :] = 0
+                kl_divergence[-1, :] = 0
+                kl_divergence[:, 0] = 0
+                kl_divergence[:, -1] = 0
+                norm_i_gain = 1 - np.exp(-1 * kl_divergence.sum())
+                self.position_history[-1][-1] = norm_i_gain
 
             with TimeIt('Calculate Travel Cost'):
                 # Distance from current robot pos.
@@ -205,17 +217,20 @@ class ViewpointEntropyCalculator:
                 d_from_best_q = np.sqrt((self._xv - q_am_pos[0])**2 + (self._yv - q_am_pos[1])**2)  # Cost of moving away from the best grasp.
                 height_weight = (cam_p.z - self.height[1])/(self.height[0]-self.height[1]) + 1e-2
                 height_weight = max(min(height_weight, 1.0), 0.0)
-                best_cost = (d_from_best_q / (self.dist_from_best_scale * height_weight)) * self.dist_from_best_gain
+                # best_cost = (d_from_best_q / (self.dist_from_best_scale * height_weight)) * self.dist_from_best_gain
+                best_cost = (d_from_best_q / self.dist_from_best_scale) * (1-height_weight) * self.dist_from_best_gain
 
                 # Distance from previous viewpoints.
                 d_from_prev_view = np.zeros(self.gw.shape)
-                for x, y, z in self.position_history:
-                    d_from_prev_view += np.clip(1 - (np.sqrt((self._xv - x)**2 + (self._yv - y)**2 + (cam_p.z - z)**2)/self.dist_from_prev_view_scale), 0, 1)
+                for x, y, z, kl in self.position_history:
+                    d_from_prev_view += np.clip(1 - (np.sqrt((self._xv - x)**2 + (self._yv - y)**2 + 0*(cam_p.z - z)**2)/self.dist_from_prev_view_scale), 0, 1) * (1-kl)
                 prev_view_cost = d_from_prev_view * self.dist_from_prev_view_gain
 
                 # Calculate total reward.
+                exp_inf_gain_before = exp_inf_gain.copy()
                 exp_inf_gain -= best_cost
                 exp_inf_gain -= prev_view_cost
+                print(exp_inf_gain_before.max(), (best_cost).max(), exp_inf_gain.max())
 
                 # Generate Command
                 exp_inf_gain_mask = exp_inf_gain.copy()
@@ -245,18 +260,27 @@ class ViewpointEntropyCalculator:
 
             with TimeIt('Response'):
                 ret = NextViewpointResponse()
+                ret.velocity_cmd.linear.x = diff[0]
+                ret.velocity_cmd.linear.y = diff[1]
+                ret.velocity_cmd.linear.z = -1 * (np.sqrt(move_amt**2 - p.x**2 - p.y**2)) * 0.5
 
-                p = Point()
-                p.x = diff[0]
-                p.y = diff[1]
-                p.z = -1 * (np.sqrt(move_amt**2 - p.x**2 - p.y**2))
-                ret.viewpoint = p
-                ret.best_grasp = Float32MultiArray()
-                ret.best_grasp.data = [q_am_pos[0], q_am_pos[1], q_am_dep, q_am_ang, q_am_wid]  # + list(normals)
+                ret.best_grasp.pose.position.x = q_am_pos[0]
+                ret.best_grasp.pose.position.y = q_am_pos[1]
+                ret.best_grasp.pose.position.z = q_am_dep
 
+                q = tft.quaternion_from_euler(np.pi, 0, q_am_angle - np.pi/2)
+                ret.best_grasp.pose.orientation.x = q[0]
+                ret.best_grasp.pose.orientation.y = q[1]
+                ret.best_grasp.pose.orientation.z = q[2]
+                ret.best_grasp.pose.orientation.w = q[3]
+
+                ret.best_grasp.quality = hist_mean[q_am[0], q_am[1]]
+                ret.best_grasp.width = q_am_wid
+
+                exp_inf_gain = (exp_inf_gain - exp_inf_gain.min())/(exp_inf_gain.max()-exp_inf_gain.min())*(exp_inf_gain_before.max()-exp_inf_gain_before.min())
                 show = gridshow('Display',
-                         [cv2.resize(points, hist_ent.shape), hist_mean, hist_ent, np.exp(exp_inf_gain), self.fgw.failures, self.gw.visited],
-                         [None, None, None, None, None, None],
+                         [cv2.resize(points, hist_ent.shape), hist_mean, change_in_entropy, exp_inf_gain, exp_inf_gain_before, self.gw.visited],
+                         [None, None, None, (exp_inf_gain.min(), exp_inf_gain_before.max()), (exp_inf_gain.min(), exp_inf_gain_before.max()), None],
                          [cv2.COLORMAP_BONE] + [cv2.COLORMAP_JET, ] * 4 + [cv2.COLORMAP_BONE],
                          3,
                          False)
@@ -274,6 +298,7 @@ class ViewpointEntropyCalculator:
         self.gw.add_grid('width_mean', 0.0)
         self.gw.add_grid('width_var', 0.0)
         self.gw.add_grid('count', 0.0)
+        self.gw.add_grid('hist_p_prev', 1.0/self.hist_bins_q, extra_dims=(self.hist_bins_q, ))
         self.position_history = []
         return EmptySrvResponse()
 

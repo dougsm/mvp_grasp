@@ -77,7 +77,7 @@ def predict(depth, process_depth=True, crop_size=300, out_size=300, depth_nan_ma
     width_out = pred_out[3].squeeze() * 150.0  # Scaled 0-150:0-1
 
     # Filter the outputs.
-    points_out = ndimage.filters.gaussian_filter(points_out, 3.0)  # 3.0
+    # points_out = ndimage.filters.gaussian_filter(points_out, 5.0)  # 3.0
     # ang_out = ndimage.filters.gaussian_filter(ang_out, 2.0)
 
     points_out = np.clip(points_out, 0.0, 1.0-1e-3)

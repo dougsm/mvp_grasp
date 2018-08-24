@@ -10,10 +10,10 @@ grasp_entropy_node:
             quality: 10
             angle: 18
     cost:
-        dist_from_best_scale: 0.2
-        dist_from_best_gain: 0.4
-        dist_from_prev_view_scale: 0.05
-        dist_from_prev_view_gain: 0.025
+        dist_from_best_scale: 0.15
+        dist_from_best_gain: 0.3
+        dist_from_prev_view_scale: 0.025
+        dist_from_prev_view_gain: 0.05
     height:
         z1: 0.54
         z2: 0.25
