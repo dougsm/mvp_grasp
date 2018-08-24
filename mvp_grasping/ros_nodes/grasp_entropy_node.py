@@ -100,6 +100,7 @@ class ViewpointEntropyCalculator:
 
         with TimeIt('Total'):
             with TimeIt('Update Histogram'):
+                self.no_viewpoints += 1
                 depth = self.curr_depth_img.copy()
                 camera_pose = self.last_image_pose
                 cam_p = camera_pose.position
@@ -233,13 +234,14 @@ class ViewpointEntropyCalculator:
 
                 # Generate Command
                 exp_inf_gain_mask = exp_inf_gain.copy()
-                exp_inf_gain_mask[d_from_robot > 0.10] = exp_inf_gain.min()
+                greedy_window = 0.1
+                exp_inf_gain_mask[d_from_robot > greedy_window] = exp_inf_gain.min()
                 ig_am = np.unravel_index(np.argmax(exp_inf_gain_mask), exp_inf_gain.shape)
                 maxpos = self.gw.cell_to_pos([ig_am])[0]
-                diff = maxpos - np.array([cam_p.x, cam_p.y])
-                move_amt = 0.05
-                if np.linalg.norm(diff) > move_amt:
-                    diff = diff/np.linalg.norm(diff) * move_amt
+                diff = (maxpos - np.array([cam_p.x, cam_p.y]))/greedy_window
+                # Maximum of 1
+                if np.linalg.norm(diff) > 1.0:
+                    diff = diff/np.linalg.norm(diff)
 
                 # diff_q = q_am_pos - np.array([cam_p.x, cam_p.y])
                 # if np.linalg.norm(diff_q) > move_amt:
@@ -260,9 +262,12 @@ class ViewpointEntropyCalculator:
             with TimeIt('Response'):
                 ret = NextViewpointResponse()
                 ret.success = True
+                ret.no_viewpoints = self.no_viewpoints
+
+                # xyz velocity normalised to 1
                 ret.velocity_cmd.linear.x = diff[0]
                 ret.velocity_cmd.linear.y = diff[1]
-                ret.velocity_cmd.linear.z = -1 * (np.sqrt(move_amt**2 - diff[0]**2 - diff[1]**2)) * 0.5
+                ret.velocity_cmd.linear.z = -1 * (np.sqrt(1 - diff[0]**2 - diff[1]**2))
 
                 ret.best_grasp.pose.position.x = q_am_pos[0]
                 ret.best_grasp.pose.position.y = q_am_pos[1]
@@ -272,6 +277,7 @@ class ViewpointEntropyCalculator:
 
                 ret.best_grasp.quality = hist_mean[q_am[0], q_am[1]]
                 ret.best_grasp.width = q_am_wid
+                ret.best_grasp.entropy = hist_ent[q_am[0], q_am[1]]
 
                 exp_inf_gain = (exp_inf_gain - exp_inf_gain.min())/(exp_inf_gain.max()-exp_inf_gain.min())*(exp_inf_gain_before.max()-exp_inf_gain_before.min())
                 show = gridshow('Display',
@@ -296,13 +302,14 @@ class ViewpointEntropyCalculator:
         self.gw.add_grid('count', 0.0)
         self.gw.add_grid('hist_p_prev', 1.0/self.hist_bins_q, extra_dims=(self.hist_bins_q, ))
         self.position_history = []
+        self.no_viewpoints = 0
         return EmptySrvResponse()
 
     def add_failure_point_callback(self, req):
         new_fp = np.zeros_like(self.fgw.failures)
         cell_id = self.gw.pos_to_cell(np.array([[req.point.x, req.point.y]]))[0]
         new_fp[cell_id[0], cell_id[1]] = 1.0
-        new_fp = gaussian_filter(new_fp, 1, mode='nearest', truncate=3)
+        new_fp = gaussian_filter(new_fp, 0.0075/self.gw.res, mode='nearest', truncate=3)
         self.fgw.failures = 0.5*self.fgw.failures + 0.5* new_fp/new_fp.max()
         return AddFailurePointResponse()
 
