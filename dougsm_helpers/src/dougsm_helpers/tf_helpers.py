@@ -9,6 +9,17 @@ import tf2_geometry_msgs
 tfBuffer = tf2_ros.Buffer()
 listener = tf2_ros.TransformListener(tfBuffer)
 
+def quaternion_to_list(quaternion):
+    return [quaternion.x, quaternion.y, quaternion.z, quaternion.w]
+
+def list_to_quaternion(l):
+    q = gmsg.Quaternion()
+    q.x = l[0]
+    q.y = l[1]
+    q.z = l[2]
+    q.w = l[3]
+    return q
+
 def convert_pose(pose, from_frame, to_frame):
     """
     Convert a pose or transform between frames using tf.
