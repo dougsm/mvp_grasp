@@ -229,7 +229,7 @@ class ViewpointEntropyCalculator:
                 exp_inf_gain_before = exp_inf_gain.copy()
                 exp_inf_gain -= best_cost
                 exp_inf_gain -= prev_view_cost
-                print(exp_inf_gain_before.max(), (best_cost).max(), exp_inf_gain.max())
+                # print(exp_inf_gain_before.max(), (best_cost).max(), exp_inf_gain.max())
 
                 # Generate Command
                 exp_inf_gain_mask = exp_inf_gain.copy()
@@ -259,16 +259,16 @@ class ViewpointEntropyCalculator:
 
             with TimeIt('Response'):
                 ret = NextViewpointResponse()
+                ret.success = True
                 ret.velocity_cmd.linear.x = diff[0]
                 ret.velocity_cmd.linear.y = diff[1]
-                ret.velocity_cmd.linear.z = -1 * (np.sqrt(move_amt**2 - p.x**2 - p.y**2)) * 0.5
+                ret.velocity_cmd.linear.z = -1 * (np.sqrt(move_amt**2 - diff[0]**2 - diff[1]**2)) * 0.5
 
                 ret.best_grasp.pose.position.x = q_am_pos[0]
                 ret.best_grasp.pose.position.y = q_am_pos[1]
                 ret.best_grasp.pose.position.z = q_am_dep
-
-                q = tft.quaternion_from_euler(np.pi, 0, q_am_angle - np.pi/2)
-                ret.best_grasp.pose.orientation = tfh.quaternion_from_list(q)
+                q = tft.quaternion_from_euler(np.pi, 0, q_am_ang - np.pi/2)
+                ret.best_grasp.pose.orientation = tfh.list_to_quaternion(q)
 
                 ret.best_grasp.quality = hist_mean[q_am[0], q_am[1]]
                 ret.best_grasp.width = q_am_wid
