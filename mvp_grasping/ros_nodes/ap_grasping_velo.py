@@ -64,7 +64,9 @@ class Run:
     log_properties = [
         'success',
         'time',
-        'quality'
+        'viewpoints',
+        'quality',
+        'entropy'
     ]
 
     def __init__(self, experiment):
@@ -74,6 +76,7 @@ class Run:
         self.t1 = 0
         self.success = False
         self.qualtiy = None
+        self.entropy = None
 
     def start(self):
         self.t0 = time.time()
@@ -120,7 +123,7 @@ class Experiment:
 
     @property
     def mpph(self):
-        return 3600 / sum([r.time for r in self.runs]) / len(self.runs) * self.success_rate
+        return (3600 / (sum([r.time for r in self.runs]) / len(self.runs))) * self.success_rate
 
     @property
     def log_list(self):
@@ -142,8 +145,10 @@ class ActiveGraspController:
 
         self.curr_velocity_publish_rate = 100.0  # Hz
         self.curr_velo_pub = rospy.Publisher('/cartesian_velocity_node_controller/cartesian_velocity', Twist, queue_size=1)
+        self.max_velo = 0.10
         self.curr_velo = Twist()
         self.best_grasp = Pose()
+        self.viewpoints = 0
         self.grasp_width = 0.10
         self._in_velo_loop = False
 
@@ -212,11 +217,7 @@ class ActiveGraspController:
             self.curr_velo = Twist()
             return
 
-        # Scale the velocity
-        vscale = 3
-        res.velocity_cmd.linear.x *= vscale
-        res.velocity_cmd.linear.y *= vscale
-        res.velocity_cmd.linear.z *= vscale
+        self.viewpoints = res.no_viewpoints
 
         # Calculate the required angular velocity to match the best grasp.
         q = tfh.quaternion_to_list(res.best_grasp.pose.orientation)
@@ -259,7 +260,13 @@ class ActiveGraspController:
                 rospy.logerr('Detected cartesian contact during velocity control loop.')
                 return False
 
-            self.curr_velo_pub.publish(self.curr_velo)
+            v = Twist()
+            v.linear.x = self.curr_velo.linear.x * self.max_velo
+            v.linear.y = self.curr_velo.linear.y * self.max_velo
+            v.linear.z = self.curr_velo.linear.z * self.max_velo
+            v.angular = self.curr_velo.angular
+
+            self.curr_velo_pub.publish(v)
             r.sleep()
 
         return not rospy.is_shutdown()
@@ -295,15 +302,15 @@ class ActiveGraspController:
 
             # Check for collisions
             if self.ROBOT_ERROR_DETECTED:
-                self.__recover_robot_from_error()
                 return False
 
             # close the fingers.
             rospy.sleep(0.2)
             self.pc.grasp(0, force=2)
 
+            # Sometimes triggered by closing on something that pushes the robot
             if self.ROBOT_ERROR_DETECTED:
-                self.__recover_robot_from_error()
+                return False
 
             return True
 
@@ -330,6 +337,7 @@ class ActiveGraspController:
 
             run = self.experiment.new_run()
             run.start()
+
             # Perform the velocity control portion.
             self._in_velo_loop = True
             velo_ok = self.__velo_control_loop()
@@ -344,11 +352,14 @@ class ActiveGraspController:
                 rospy.logerr('Aborting this Run.')
                 continue
 
+            # Execute the Grasp
             grasp_ret = self.__execute_best_grasp()
             run.stop()
 
-            if not grasp_ret:
+            if not grasp_ret or self.ROBOT_ERROR_DETECTED:
                 rospy.logerr('Something went wrong, aborting this run')
+                if self.ROBOT_ERROR_DETECTED:
+                    self.__recover_robot_from_error()
                 continue
 
             # Release Object
@@ -371,6 +382,8 @@ class ActiveGraspController:
 
             run.success = grasp_success
             run.quality = self.best_grasp.quality
+            run.entropy = self.best_grasp.entropy
+            run.viewpoints = self.viewpoints
             run.save()
 
 
