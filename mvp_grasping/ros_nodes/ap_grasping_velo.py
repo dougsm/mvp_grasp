@@ -131,6 +131,7 @@ class Experiment:
 
     def log_run(self, run):
         self.logger.log_list(run.log_list + self.log_list)
+        print(self.success_rate, self.mpph)
 
 
 class ActiveGraspController:
@@ -186,7 +187,7 @@ class ActiveGraspController:
     def __weight_increase_check(self):
         try:
             w = rospy.wait_for_message('/scales/weight', Int16, timeout=2).data
-            increased = (w - 5) > self.last_weight
+            increased = w > self.last_weight
             self.last_weight = w
             return increased
         except:
