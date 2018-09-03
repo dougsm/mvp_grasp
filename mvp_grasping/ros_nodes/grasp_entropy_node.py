@@ -79,6 +79,7 @@ class ViewpointEntropyCalculator:
         self.img_crop_y_offset = rospy.get_param('~camera/crop_y_offset')
         self.cam_fov = rospy.get_param('~camera/fov')
 
+        self.counter = 0
         self.curr_depth_img = None
         self.curr_img_time = 0
         self.last_image_pose = None
@@ -178,8 +179,12 @@ class ViewpointEntropyCalculator:
 
                 # best_grasp_hist = self.gw.hist[q_am[0], q_am[1], :, :]
                 best_grasp_hist = self.gw.hist[conn_neighbours[:, 0], conn_neighbours[:, 1], :, :]
-                angle_weights = np.sum(best_grasp_hist - 1 * weights.reshape((1, 1, -1)), axis=2)
+                # print(best_grasp_hist, best_grasp_hist.shape)
+                angle_weights = np.sum((best_grasp_hist - 1) * weights.reshape((1, 1, -1)), axis=2)
+                # print(angle_weights, angle_weights.shape)
                 ang_bins = (np.arange(0.5/self.hist_bins_a, 1.0, 1/self.hist_bins_a) * np.pi).reshape(1, -1)
+                # print(ang_bins, ang_bins.shape)
+                # print(neighbour_weights, neighbour_weights.shape)
                 q_am_ang = np.arctan2(
                     np.sum(np.sin(ang_bins) * angle_weights * neighbour_weights.reshape(-1, 1)),
                     np.sum(np.cos(ang_bins) * angle_weights * neighbour_weights.reshape(-1, 1))
@@ -210,6 +215,8 @@ class ViewpointEntropyCalculator:
                 kl_divergence[:, 0] = 0
                 kl_divergence[:, -1] = 0
                 norm_i_gain = 1 - np.exp(-1 * kl_divergence.sum())
+                # norm_i_gain = np.sum(change_in_entropy)/np.sum(hist_ent_prev)
+                # print(norm_i_gain)
                 self.position_history[-1][-1] = norm_i_gain
 
             with TimeIt('Calculate Travel Cost'):
@@ -293,6 +300,27 @@ class ViewpointEntropyCalculator:
 
                 self.img_pub.publish(bridge.cv2_to_imgmsg(show))
 
+        if False:
+            kwargs = {
+                'M': self.gw.hist,
+                'depth_crop': depth_crop,
+                'points': points,
+                'hist_sum_q': hist_sum_q,
+                'hist_mean': hist_mean,
+                'q_am': q_am,
+                'q_am_pos': q_am_pos,
+                'best_grasp_hist': best_grasp_hist,
+                'hist_ent': hist_ent,
+                'best_cost': best_cost,
+                'exp_inf_gain': exp_inf_gain,
+                'pos_history': np.array(self.position_history),
+                'visited': self.gw.visited,
+                'depth': depth_crop,
+                'v': diff
+            }
+            np.savez('/home/guest/numpy_out/%d.npz'%self.counter, **kwargs)
+            self.counter += 1
+
         return ret
 
     def reset_gridworld(self, req):
@@ -307,6 +335,7 @@ class ViewpointEntropyCalculator:
         self.gw.add_grid('hist_p_prev', 1.0/self.hist_bins_q, extra_dims=(self.hist_bins_q, ))
         self.position_history = []
         self.no_viewpoints = 0
+        self.counter = 0
         return EmptySrvResponse()
 
     def add_failure_point_callback(self, req):

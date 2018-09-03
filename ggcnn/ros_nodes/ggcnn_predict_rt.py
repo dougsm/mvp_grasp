@@ -6,6 +6,8 @@ import rospy
 
 import numpy as np
 
+import tensorflow as tf
+
 import cv2
 import scipy.ndimage as ndimage
 from skimage.draw import circle
