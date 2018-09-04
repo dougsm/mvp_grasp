@@ -86,6 +86,7 @@ class ViewpointEntropyCalculator:
         rospy.Subscriber(rospy.get_param('~camera/depth_topic'), Image, self._depth_img_callback, queue_size=1)
 
     def _depth_img_callback(self, msg):
+        # Doing a rospy.wait_for_message is super slow, compared to just subscribing and keeping the newest one.
         self.curr_img_time = time.time()
         self.last_image_pose = tfh.current_robot_pose(self.base_frame, self.camera_frame)
         self.curr_depth_img = bridge.imgmsg_to_cv2(msg)
@@ -123,7 +124,7 @@ class ViewpointEntropyCalculator:
                 imh, imw = depth.shape
                 x = ((np.vstack((np.linspace((imw - self.img_crop_size) // 2, (imw - self.img_crop_size) // 2 + self.img_crop_size, depth_crop.shape[1], np.float), )*depth_crop.shape[0]) - self.cam_K[0, 2])/self.cam_K[0, 0] * depth_crop).flatten()
                 y = ((np.vstack((np.linspace((imh - self.img_crop_size) // 2 - self.img_crop_y_offset, (imh - self.img_crop_size) // 2 + self.img_crop_size - self.img_crop_y_offset, depth_crop.shape[0], np.float), )*depth_crop.shape[1]).T - self.cam_K[1,2])/self.cam_K[1, 1] * depth_crop).flatten()
-                pos = np.dot(camera_rot, np.stack((x, y, depth_crop.flatten()))).T + np.array([[camera_pose.position.x, camera_pose.position.y, camera_pose.position.z]])
+                pos = np.dot(camera_rot, np.stack((x, y, depth_crop.flatten()))).T + np.array([[cam_p.x, cam_p.y, cam_p.z]])
 
                 # Clean the data a bit.
                 pos[depth_nan_mask.flatten() == 1, :] = 0  # Get rid of NaNs
@@ -131,7 +132,6 @@ class ViewpointEntropyCalculator:
                 pos[pos[:, 2] < 0.0, :] = 0  # Ignore obvious noise.
 
                 cell_ids = self.gw.pos_to_cell(pos[:, :2])
-                width_m =  2 / depth_crop * np.tan(self.cam_fov/300.0 * width_img / 2.0 / 180.0 * np.pi)
                 width_m = width_img / 300.0 * 2.0 * depth_crop * np.tan(self.cam_fov * self.img_crop_size/depth.shape[0] / 2.0 / 180.0 * np.pi)
 
                 update_batch([pos[:, 2], width_m.flatten()], cell_ids, self.gw.count, [self.gw.depth_mean, self.gw.width_mean], [self.gw.depth_var, self.gw.width_var])

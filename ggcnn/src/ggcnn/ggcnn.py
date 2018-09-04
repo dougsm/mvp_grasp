@@ -56,7 +56,7 @@ def process_depth_image(depth, crop_size, out_size=300, return_mask=False, crop_
         return depth_crop
 
 
-def predict(depth, process_depth=True, crop_size=300, out_size=300, depth_nan_mask=None):
+def predict(depth, process_depth=True, crop_size=300, out_size=300, depth_nan_mask=None, filters=(2.0, 1.0, 1.0)):
     if process_depth:
         depth, depth_nan_mask = process_depth_image(depth, crop_size, out_size, True)
 
@@ -77,9 +77,12 @@ def predict(depth, process_depth=True, crop_size=300, out_size=300, depth_nan_ma
     width_out = pred_out[3].squeeze() * 150.0  # Scaled 0-150:0-1
 
     # Filter the outputs.
-    points_out = ndimage.filters.gaussian_filter(points_out, 2.0)  # 3.0
-    ang_out = ndimage.filters.gaussian_filter(ang_out, 1.0)
-    width_out = ndimage.filters.gaussian_filter(width_out, 1.0)
+    if filters[0]:
+        points_out = ndimage.filters.gaussian_filter(points_out, filters[0])  # 3.0
+    if filters[1]:
+        ang_out = ndimage.filters.gaussian_filter(ang_out, filters[1])
+    if filters[2]:
+        width_out = ndimage.filters.gaussian_filter(width_out, filters[2])
 
     points_out = np.clip(points_out, 0.0, 1.0-1e-3)
 
