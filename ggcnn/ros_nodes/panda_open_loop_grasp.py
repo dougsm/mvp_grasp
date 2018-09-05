@@ -1,172 +1,294 @@
 #! /usr/bin/env python
 
+from __future__ import division, print_function
+
 import rospy
 import tf.transformations as tft
 
+import os
+import time
+import datetime
+
 import numpy as np
 
-# import kinova_msgs.msg
-# import kinova_msgs.srv
-import std_msgs.msg
-import std_srvs.srv
-import geometry_msgs.msg
-
-# from helpers.gripper_action_client import set_finger_positions
-# from helpers.position_action_client import position_client, move_to_position
-from dougsm_helpers.tf_helpers import current_robot_pose, publish_tf_quaterion_as_transform, convert_pose, publish_pose_as_transform
-# from helpers.covariance import generate_cartesian_covariance
+from std_msgs.msg import Empty, Int16
+from geometry_msgs.msg import Twist, Pose
+from franka_msgs.msg import FrankaState, Errors as FrankaErrors
+from std_srvs.srv import Empty as EmptySrv
 
 from franka_control_wrappers.panda_commander import PandaCommander
 
-MOVING = False  # Flag whether the robot is moving under velocity control.
-CURR_Z = 0  # Current end-effector z height.
+import dougsm_helpers.tf_helpers as tfh
+from dougsm_helpers.timeit import TimeIt
+from dougsm_helpers.ros_control import ControlSwitcher
+
+from ggcnn.msg import Grasp
+from ggcnn.srv import GraspPrediction, GraspPredictionRequest
+
+class Logger:
+    def __init__(self, output_desc='run', output_dir='/home/acrv/doug_logs/'):
+        dt = datetime.datetime.now().strftime('%m%d_%H%M%S')
+        self.out_file = os.path.join(output_dir, '%s_%s.txt' % (dt, output_desc))
+
+    def write_line(self, l):
+        with open(self.out_file, 'a') as f:
+            f.write(l)
+            f.write('\n')
+
+    def log_list(self, l):
+        o = []
+        for i in l:
+            if isinstance(i, float):
+                o.append('%0.2f' % i)
+            else:
+                o.append(i)
+        self.write_line('\t'.join([str(i) for i in o]))
+
+    def log_params(self, params):
+        for p in params:
+            self.log_list([
+                p,
+                rospy.get_param(p)
+            ])
+
+    def log_dict(self, d, s=[]):
+        if isinstance(d, dict):
+            for k in d:
+                self.log_dict(d[k], s + [k])
+        else:
+            self.log_list([
+                '/'.join(s),
+                d
+            ])
+
+class Run:
+    log_properties = [
+        'success',
+        'time',
+        'quality',
+    ]
+
+    def __init__(self, experiment):
+        self.experiment = experiment
+        self.viewpoints = None
+        self.t0 = 0
+        self.t1 = 0
+        self.success = False
+        self.qualtiy = None
+
+    def start(self):
+        self.t0 = time.time()
+
+    def stop(self):
+        self.t1 = time.time()
+
+    @property
+    def time(self):
+        return self.t1 - self.t0
+
+    @property
+    def log_list(self):
+        return [getattr(self, p) for p in Run.log_properties]
+
+    def save(self):
+        self.experiment.save_run(self)
+
+class Experiment:
+    log_properties = [
+        'success_rate',
+        'mpph'
+    ]
+    def __init__(self):
+        self.runs = []
+        exp_name = raw_input('Name of this experiment? ')
+        self.logger = Logger(exp_name)
+        self.logger.log_dict(rospy.get_param('/grasp_entropy_node'))
+        self.logger.log_list(Run.log_properties + Experiment.log_properties)
+        self.successes = 0
+
+    def new_run(self):
+        return Run(self)
+
+    def save_run(self, run):
+        if run.success:
+            self.successes += 1
+        self.runs.append(run)
+        self.log_run(run)
+
+    @property
+    def success_rate(self):
+        return self.successes/len(self.runs)
+
+    @property
+    def mpph(self):
+        return (3600 / (sum([r.time for r in self.runs]) / len(self.runs))) * self.success_rate
+
+    @property
+    def log_list(self):
+        return [getattr(self, p) for p in Experiment.log_properties]
+
+    def log_run(self, run):
+        self.logger.log_list(run.log_list + self.log_list)
+        print(self.success_rate, self.mpph)
 
 
-def execute_grasp(pc):
-    # Execute a grasp.
-    global MOVING
-    global CURR_Z
-    global start_force_srv
-    global stop_force_srv
+class PandaOpenLoopGraspController:
+    def __init__(self):
+        ggcnn_service_name = '/ggcnn_service'
+        rospy.wait_for_service(ggcnn_service_name + '/predict')
+        self.ggcnn_srv = rospy.ServiceProxy(ggcnn_service_name + '/predict', GraspPrediction)
 
-    # Get the positions.
-    msg = rospy.wait_for_message('/ggcnn/out/command', std_msgs.msg.Float32MultiArray)
-    d = list(msg.data)
+        self.curr_velocity_publish_rate = 100.0  # Hz
+        self.curr_velo_pub = rospy.Publisher('/cartesian_velocity_node_controller/cartesian_velocity', Twist, queue_size=1)
+        self.max_velo = 0.10
+        self.curr_velo = Twist()
+        self.best_grasp = Grasp()
 
-    # Calculate the gripper width.
-    grip_width = d[4]
-    # Convert width in pixels to m.
-    # 0.07 is distance from end effector (CURR_Z) to camera.
-    # 0.1 is approx degrees per pixel for the realsense.
-    g_width = 2 * ((CURR_Z + 0.07)) * np.tan(0.1 * grip_width / 2.0 / 180.0 * np.pi)
-    # Convert into motor positions.
-    #g = min((1 - (min(g_width, 70)/70)) * (6800-4000) + 4000, 5500)
+        self.cs = ControlSwitcher({'moveit': 'position_joint_trajectory_controller',
+                                   'velocity': 'cartesian_velocity_node_controller'})
+        self.cs.switch_controller('moveit')
+        self.pc = PandaCommander(group_name='panda_arm_hand')
 
+        self.robot_state = None
+        self.ROBOT_ERROR_DETECTED = False
+        self.BAD_UPDATE = False
+        rospy.Subscriber('/franka_state_controller/franka_states', FrankaState, self.__robot_state_callback, queue_size=1)
 
-    # pc.set_gripper(g_width + 0.01)
+        self.pregrasp_pose = [(rospy.get_param('/grasp_entropy_node/histogram/bounds/x2') + rospy.get_param('/grasp_entropy_node/histogram/bounds/x1'))/2 - 0.03,
+                              (rospy.get_param('/grasp_entropy_node/histogram/bounds/y2') + rospy.get_param('/grasp_entropy_node/histogram/bounds/y1'))/2 + 0.10,
+                              rospy.get_param('/grasp_entropy_node/height/z1') + 0.05,
+                              2**0.5/2, -2**0.5/2, 0, 0]
 
+        self.last_weight = 0
+        self.__weight_increase_check()
 
-    # Construct the Pose in the frame of the camera.
-    gp = geometry_msgs.msg.Pose()
-    gp.position.x = d[0]
-    gp.position.y = d[1]
-    gp.position.z = d[2]
-    q = tft.quaternion_from_euler(0, 0, -1 * d[3] - np.pi/2)
-    gp.orientation.x = q[0]
-    gp.orientation.y = q[1]
-    gp.orientation.z = q[2]
-    gp.orientation.w = q[3]
+        self.experiment = Experiment()
 
-    print(gp)
-    gp_base = convert_pose(gp, 'camera_depth_optical_frame', 'panda_link0')
-    gpbo = gp_base.orientation
-    e = tft.euler_from_quaternion([gpbo.x, gpbo.y, gpbo.z, gpbo.w])
+    def __recover_robot_from_error(self):
+        rospy.logerr('Recovering')
+        self.pc.recover()
+        rospy.logerr('Done')
+        self.ROBOT_ERROR_DETECTED = False
 
-    q = tft.quaternion_from_euler(np.pi, 0, e[2])
-    gp_base.orientation.x = q[0]
-    gp_base.orientation.y = q[1]
-    gp_base.orientation.z = q[2]
-    gp_base.orientation.w = q[3]
+    def __weight_increase_check(self):
+        try:
+            w = rospy.wait_for_message('/scales/weight', Int16, timeout=2).data
+            increased = w > self.last_weight
+            self.last_weight = w
+            return increased
+        except:
+            return raw_input('No weight. Success? [1/0]') == '1'
 
-    publish_pose_as_transform(gp_base, 'panda_link0', 'G', 0.5)
+    def __robot_state_callback(self, msg):
+        self.robot_state = msg
+        if any(self.robot_state.cartesian_collision):
+            if not self.ROBOT_ERROR_DETECTED:
+                rospy.logerr('Detected Cartesian Collision')
+            self.ROBOT_ERROR_DETECTED = True
+        for s in FrankaErrors.__slots__:
+            if getattr(msg.current_errors, s):
+                self.stop()
+                if not self.ROBOT_ERROR_DETECTED:
+                    rospy.logerr('Robot Error Detected')
+                self.ROBOT_ERROR_DETECTED = True
 
-    if raw_input('Looks Good? Y/n') not in ['', 'y', 'Y']:
-        return
+    def __execute_best_grasp(self):
+            self.cs.switch_controller('moveit')
 
-    # Offset for initial pose.
-    initial_offset = 0.15
-    gp_base.position.z = max(gp_base.position.z, 0.01)
-    gp_base.position.z += initial_offset + 0.13
+            ret = self.ggcnn_srv.call()
+            if not ret.success:
+                return False
+            best_grasp = ret.best_grasp
+            self.best_grasp = best_grasp
 
-    pc.goto_pose(gp_base, velocity=0.25)
+            tfh.publish_pose_as_transform(best_grasp.pose, 'panda_link0', 'G', 0.5)
 
-    # Disable force control, makes the robot more accurate.
-    # stop_force_srv.call(kinova_msgs.srv.StopRequest())
+            # Offset for initial pose.
+            initial_offset = 0.10
+            LINK_EE_OFFSET = 0.138
 
-    # move_to_pose(gp_base)
-    # rospy.sleep(0.1)
+            # Add some limits, plus a starting offset.
+            best_grasp.pose.position.z = max(best_grasp.pose.position.z - 0.01, 0.026)  # 0.021 = collision with ground
+            best_grasp.pose.position.z += initial_offset + LINK_EE_OFFSET  # Offset from end efector position to
 
-    # Start force control, helps prevent bad collisions.
-    # start_force_srv.call(kinova_msgs.srv.StartRequest())
+            self.pc.set_gripper(best_grasp.width, wait=False)
+            rospy.sleep(0.1)
+            self.pc.goto_pose(best_grasp.pose, velocity=0.5)
 
-    # rospy.sleep(0.25)
+            # Reset the position
+            best_grasp.pose.position.z -= initial_offset + LINK_EE_OFFSET
 
-    # Reset the position
-    gp_base.position.z -= initial_offset
-    pc.goto_pose_cartesian(gp_base, velocity=0.1)
+            self.cs.switch_controller('velocity')
+            v = Twist()
+            v.linear.z = -0.05
 
-    # Flag to check for collisions.
-    # MOVING = True
+            # Monitor robot state and descend
+            while self.robot_state.O_T_EE[-2] > best_grasp.pose.position.z and not any(self.robot_state.cartesian_contact) and not self.ROBOT_ERROR_DETECTED:
+                self.curr_velo_pub.publish(v)
+                rospy.sleep(0.01)
+            v.linear.z = 0
+            self.curr_velo_pub.publish(v)
 
-    # Generate a nonlinearity for the controller.
-    # cart_cov = generate_cartesian_covariance(0)
+            # Check for collisions
+            if self.ROBOT_ERROR_DETECTED:
+                return False
 
-    # Move straight down under velocity control.
-    # velo_pub = rospy.Publisher('/m1n6s200_driver/in/cartesian_velocity', kinova_msgs.msg.PoseVelocity, queue_size=1)
-    # while MOVING and CURR_Z - 0.02 > gp_base.position.z:
-    #     dz = gp_base.position.z - CURR_Z - 0.03   # Offset by a few cm for the fingertips.
-    #     MAX_VELO_Z = 0.08
-    #
-    #     dz = max(min(dz, MAX_VELO_Z), -1.0*MAX_VELO_Z)
-    #
-    #     v = np.array([0, 0, dz])
-    #     vc = list(np.dot(v, cart_cov)) + [0, 0, 0]
-    #     velo_pub.publish(kinova_msgs.msg.PoseVelocity(*vc))
-    #     rospy.sleep(1/100.0)
+            # close the fingers.
+            rospy.sleep(0.2)
+            self.pc.grasp(0, force=2)
 
-    # MOVING = False
+            # Sometimes triggered by closing on something that pushes the robot
+            if self.ROBOT_ERROR_DETECTED:
+                return False
 
-    # close the fingers.
-    rospy.sleep(1.0)
-    pc.grasp(0)
+            return True
 
-    # Move back up to initial position.
-    # gp_base.position.z += initial_offset
-    # gp_base.orientation.x = 1
-    # gp_base.orientation.y = 0
-    # gp_base.orientation.z = 0
-    # gp_base.orientation.w = 0
-    # move_to_pose(gp_base)
+    def stop(self):
+        self.pc.stop()
+        self.curr_velo = Twist()
+        self.curr_velo_pub.publish(self.curr_velo)
 
-    # stop_force_srv.call(kinova_msgs.srv.StopRequest())
+    def go(self):
+        raw_input('Press Enter to Start.')
+        while not rospy.is_shutdown():
+            self.cs.switch_controller('moveit')
+            self.pc.goto_named_pose('grip_ready', velocity=0.25)
+            self.pc.goto_pose(self.pregrasp_pose, velocity=0.25)
+            self.pc.set_gripper(0.1)
 
-    return
+            self.cs.switch_controller('velocity')
 
-PREGRASP_POSE = [0.0, -0.45, 0.55, 2**0.5/2, -2**0.5/2, 0, 0]
+            run = self.experiment.new_run()
+            run.start()
+            grasp_ret = self.__execute_best_grasp()
+            run.stop()
+
+            if not grasp_ret or self.ROBOT_ERROR_DETECTED:
+                rospy.logerr('Something went wrong, aborting this run')
+                if self.ROBOT_ERROR_DETECTED:
+                    self.__recover_robot_from_error()
+                continue
+
+            # Release Object
+            self.cs.switch_controller('moveit')
+            self.pc.goto_named_pose('grip_ready', velocity=0.5)
+            self.pc.goto_named_pose('drop_box', velocity=0.5)
+            self.pc.set_gripper(0.07)
+
+            # Check success using the scales.
+            rospy.sleep(1.0)
+            grasp_success = self.__weight_increase_check()
+            if not grasp_success:
+                rospy.logerr("Failed Grasp")
+            else:
+                rospy.logerr("Successful Grasp")
+
+            run.success = grasp_success
+            run.quality = self.best_grasp.quality
+            run.save()
+
 
 if __name__ == '__main__':
-    rospy.init_node('panda_open_loop_grasp', anonymous=True)
-
-    # Robot Monitors.
-    # wrench_sub = rospy.Subscriber('/m1n6s200_driver/out/tool_wrench', geometry_msgs.msg.WrenchStamped, robot_wrench_callback, queue_size=1)
-    # position_sub = rospy.Subscriber('/m1n6s200_driver/out/tool_pose', geometry_msgs.msg.PoseStamped, robot_position_callback, queue_size=1)
-
-    # https://github.com/dougsm/rosbag_recording_services
-    # start_record_srv = rospy.ServiceProxy('/data_recording/start_recording', std_srvs.srv.Trigger)
-    # stop_record_srv = rospy.ServiceProxy('/data_recording/stop_recording', std_srvs.srv.Trigger)
-
-    # Enable/disable force control.
-    # start_force_srv = rospy.ServiceProxy('/m1n6s200_driver/in/start_force_control', kinova_msgs.srv.Start)
-    # stop_force_srv = rospy.ServiceProxy('/m1n6s200_driver/in/stop_force_control', kinova_msgs.srv.Stop)
-
-    pc = PandaCommander(group_name='panda_arm_hand')
-    pc.set_gripper(0.1)
-    pc.home_gripper()
-
-    # Home position.
-    # pc.goto_pose(PREGRASP_POSE)
-    pc.goto_named_pose('grip_ready', velocity=0.5)
-
-
-    while not rospy.is_shutdown():
-
-        pc.set_gripper(0.1)
-
-        raw_input('Press Enter to Start.')
-
-        # start_record_srv(std_srvs.srv.TriggerRequest())
-        rospy.sleep(3.0)
-        execute_grasp(pc)
-        pc.goto_named_pose('grip_ready', velocity=0.25)
-        rospy.sleep(3.0)
-        # stop_record_srv(std_srvs.srv.TriggerRequest())
+    rospy.init_node('panda_open_loop_grasp')
+    pg = PandaOpenLoopGraspController()
+    pg.go()
