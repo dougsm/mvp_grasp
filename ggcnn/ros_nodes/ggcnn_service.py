@@ -7,6 +7,7 @@ import rospy
 import time
 
 import numpy as np
+import cv2
 
 import dougsm_helpers.tf_helpers as tfh
 from tf import transformations as tft
@@ -72,8 +73,8 @@ class GGCNNService:
             depth_crop, depth_nan_mask = process_depth_image(depth, self.img_crop_size, 300, return_mask=True, crop_y_offset=self.img_crop_y_offset)
             points, angle, width_img, _ = predict(depth_crop, process_depth=False, depth_nan_mask=depth_nan_mask, filters=(5.0, 2.0, 2.0))
 
-            # angle -= np.arcsin(camera_rot[0, 1])  # Correct for the rotation of the camera
-            angle = (angle + np.pi/2) % np.pi - np.pi/2 # Wrap [-np.pi/2, np.pi/2]
+            angle -= np.arcsin(camera_rot[0, 1])  # Correct for the rotation of the camera
+            angle = (angle + np.pi/2) % np.pi - np.pi/2 #Wrap [-np.pi/2, np.pi/2]
 
             # Convert to 3D positions.
             imh, imw = depth.shape
@@ -92,11 +93,20 @@ class GGCNNService:
             g.pose.position.x = pos[best_g, 0]
             g.pose.position.y = pos[best_g, 1]
             g.pose.position.z = pos[best_g, 2]
-            g.pose.orientation = tfh.list_to_quaternion(tft.quaternion_from_euler(np.pi, 0, angle[best_g_unr]))
-            g.width = width_m
+            g.pose.orientation = tfh.list_to_quaternion(tft.quaternion_from_euler(np.pi, 0, angle[best_g_unr] - np.pi/2))
+            g.width = width_m[best_g_unr]
             g.quality = points[best_g_unr]
 
-            return
+            show = gridshow('Display',
+                     [depth_crop, points, angle],
+                     [(0.30, 0.55), None, (-np.pi, np.pi)],
+                     [cv2.COLORMAP_BONE, cv2.COLORMAP_JET, cv2.COLORMAP_HSV],
+                     3,
+                     False)
+
+            self.img_pub.publish(bridge.cv2_to_imgmsg(show))
+
+            return ret
 
 if __name__ == '__main__':
     rospy.init_node('ggcnn_service')

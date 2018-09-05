@@ -185,10 +185,16 @@ class ViewpointEntropyCalculator:
                 ang_bins = (np.arange(0.5/self.hist_bins_a, 1.0, 1/self.hist_bins_a) * np.pi).reshape(1, -1)
                 # print(ang_bins, ang_bins.shape)
                 # print(neighbour_weights, neighbour_weights.shape)
+
+                # Do double angles so that -np.pi/2 == np.pi/2, then unwrap
                 q_am_ang = np.arctan2(
-                    np.sum(np.sin(ang_bins) * angle_weights * neighbour_weights.reshape(-1, 1)),
-                    np.sum(np.cos(ang_bins) * angle_weights * neighbour_weights.reshape(-1, 1))
-                ) - np.pi/2
+                    np.sum(np.sin(ang_bins*2) * angle_weights * neighbour_weights.reshape(-1, 1)),
+                    np.sum(np.cos(ang_bins*2) * angle_weights * neighbour_weights.reshape(-1, 1))
+                )
+                if q_am_ang < 0:
+                    q_am_ang += 2*np.pi
+                q_am_ang = q_am_ang/2.0 - np.pi/2
+
                 # q_am_ang = np.average(q_am_ang, weights=neighbour_weights)
                 # print(q_am_ang)
 

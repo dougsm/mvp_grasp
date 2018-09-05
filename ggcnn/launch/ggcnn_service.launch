@@ -1,0 +1,5 @@
+<?xml version="1.0" ?>
+<launch>
+  <rosparam command="load" file="$(find ggcnn)/cfg/ggcnn_service.yaml" />
+  <node name="ggcnn_service" pkg="ggcnn" type="ggcnn_service.py" output="screen"/>
+</launch>
