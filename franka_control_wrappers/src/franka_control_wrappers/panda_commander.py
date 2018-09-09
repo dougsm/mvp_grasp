@@ -136,7 +136,7 @@ class PandaCommander(object):
         else:
             return True
 
-    def grasp(self, width=0, e_inner=0.1, e_outer=0.1, speed=0.1, force=15):
+    def grasp(self, width=0, e_inner=0.1, e_outer=0.1, speed=0.1, force=1):
         client = actionlib.SimpleActionClient('franka_gripper/grasp', franka_gripper.msg.GraspAction)
         client.wait_for_server()
         client.send_goal(
