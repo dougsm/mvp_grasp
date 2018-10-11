@@ -18,7 +18,7 @@ from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import Image, CameraInfo
 from std_msgs.msg import Float32MultiArray
 
-from ggcnn.ggcnn import predict
+from ggcnn.ggcnn_torch import predict
 from dougsm_helpers.timeit import TimeIt
 
 bridge = CvBridge()

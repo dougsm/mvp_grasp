@@ -35,7 +35,7 @@ class GGCNNService:
         self.img_pub = rospy.Publisher('~visualisation', Image, queue_size=1)
         rospy.Service('~predict', GraspPrediction, self.compute_service_handler)
 
-        self.base_frame = rospy.get_param('~camera/base_frame')
+        self.base_frame = rospy.get_param('~camera/robot_base_frame')
         self.camera_frame = rospy.get_param('~camera/camera_frame')
         self.img_crop_size = rospy.get_param('~camera/crop_size')
         self.img_crop_y_offset = rospy.get_param('~camera/crop_y_offset')
