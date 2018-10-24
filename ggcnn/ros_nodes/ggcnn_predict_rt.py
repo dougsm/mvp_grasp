@@ -63,8 +63,12 @@ def depth_callback(depth_message):
         depth = bridge.imgmsg_to_cv2(depth_message)
         #  Crop a square out of the middle of the depth and resize it to 300*300
         crop_size = 400
+        crop_offset=40
+        out_size = 300
 
-        points_out, ang_out, width_out, depth_crop = predict(depth, crop_size)
+        points_out, ang_out, width_out, depth_crop = predict(depth, crop_size, out_size=out_size, crop_y_offset=crop_offset)
+
+        # points_out[points_out < points_out.max()/4] = 0
 
     with TimeIt('Calculate Depth'):
         # Figure out roughly the depth in mm of the part between the grippers for collision avoidance.
@@ -86,6 +90,7 @@ def depth_callback(depth_message):
             # Calculate a set of local maxes.  Choose the one that is closes to the previous one.
             maxes = peak_local_max(points_out, min_distance=10, threshold_abs=0.1, num_peaks=3)
             if maxes.shape[0] == 0:
+                rospy.logerr('No Local Maxes')
                 return
             max_pixel = maxes[np.argmin(np.linalg.norm(maxes - prev_mp, axis=1))]
 
@@ -96,7 +101,7 @@ def depth_callback(depth_message):
         width = width_out[max_pixel[0], max_pixel[1]]
 
         # Convert max_pixel back to uncropped/resized image coordinates in order to do the camera transform.
-        max_pixel = ((np.array(max_pixel) / 300.0 * crop_size) + np.array([(480 - crop_size)//2, (640 - crop_size) // 2]))
+        max_pixel = ((np.array(max_pixel) / out_size * crop_size) + np.array([(480 - crop_size)//2 - crop_offset, (640 - crop_size) // 2]))
         max_pixel = np.round(max_pixel).astype(np.int)
 
         point_depth = depth[max_pixel[0], max_pixel[1]]
@@ -111,9 +116,9 @@ def depth_callback(depth_message):
 
     with TimeIt('Draw'):
         # Draw grasp markers on the points_out and publish it. (for visualisation)
-        grasp_img = np.zeros((300, 300, 3), dtype=np.uint8)
-        grasp_img[:,:,2] = (points_out * 255.0)
-
+        # grasp_img = np.zeros((300, 300, 3), dtype=np.uint8)
+        # grasp_img[:,:,2] = (points_out * 255.0)
+        grasp_img = cv2.applyColorMap((points_out * 255).astype(np.uint8), cv2.COLORMAP_JET)
         grasp_img_plain = grasp_img.copy()
 
         rr, cc = circle(prev_mp[0], prev_mp[1], 5)
@@ -131,7 +136,7 @@ def depth_callback(depth_message):
         grasp_img_plain.header = depth_message.header
         grasp_plain_pub.publish(grasp_img_plain)
 
-        depth_pub.publish(bridge.cv2_to_imgmsg(depth_crop))
+        depth_pub.publish(bridge.cv2_to_imgmsg(depth_crop.squeeze(), encoding=depth_message.encoding))
 
         ang_pub.publish(bridge.cv2_to_imgmsg(ang_out))
 

@@ -1,4 +1,5 @@
 from os import path
+import sys
 
 import cv2
 import numpy as np
@@ -11,7 +12,9 @@ import torch
 
 from dougsm_helpers.timeit import TimeIt
 
-MODEL_FILE = 'models/epoch_5_iou_0.80'
+MODEL_FILE = '/home/guest/epoch_24_iou_0.82_morezoom'
+here = path.dirname(path.abspath(__file__))
+sys.path.append(here)
 model = torch.load(path.join(path.dirname(__file__), MODEL_FILE))
 device = torch.device("cuda:0")
 
@@ -59,24 +62,26 @@ def process_depth_image(depth, crop_size, out_size=300, return_mask=False, crop_
         return depth_crop
 
 
-def predict(depth, process_depth=True, crop_size=300, out_size=300, depth_nan_mask=None, filters=(2.0, 1.0, 1.0)):
+def predict(depth, process_depth=True, crop_size=300, out_size=300, depth_nan_mask=None, crop_y_offset=0, filters=(2.0, 1.0, 1.0)):
     if process_depth:
-        depth, depth_nan_mask = process_depth_image(depth, crop_size, out_size, True)
+        depth, depth_nan_mask = process_depth_image(depth, crop_size, out_size=out_size, return_mask=True, crop_y_offset=crop_y_offset)
 
     # Inference
-    depth = np.clip((depth - depth.mean()), -1, 1)
-    pred_out = model(depth.reshape((1, 1, 300, 300)))
+    depth = np.clip((depth - depth.mean()), -1, 1).reshape(1, 1, out_size, out_size)
+    depthT = torch.from_numpy(depth.astype(np.float32)).to(device)
+    with torch.no_grad():
+        pred_out = model(depthT)
 
-    points_out = pred_out[0].squeeze()
+    points_out = pred_out[0].cpu().numpy().squeeze()
     points_out[depth_nan_mask] = 0
     # points_out = points_out ** 2
 
     # Calculate the angle map.
-    cos_out = pred_out[1].squeeze()
-    sin_out = pred_out[2].squeeze()
+    cos_out = pred_out[1].cpu().numpy().squeeze()
+    sin_out = pred_out[2].cpu().numpy().squeeze()
     ang_out = np.arctan2(sin_out, cos_out) / 2.0
 
-    width_out = pred_out[3].squeeze() * 150.0  # Scaled 0-150:0-1
+    width_out = pred_out[3].cpu().numpy().squeeze() * 150.0  # Scaled 0-150:0-1
 
     # Filter the outputs.
     if filters[0]:
