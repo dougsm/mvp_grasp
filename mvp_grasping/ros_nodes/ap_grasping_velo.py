@@ -146,7 +146,7 @@ class ActiveGraspController:
 
         self.curr_velocity_publish_rate = 100.0  # Hz
         self.curr_velo_pub = rospy.Publisher('/cartesian_velocity_node_controller/cartesian_velocity', Twist, queue_size=1)
-        self.max_velo = 0.10
+        self.max_velo = 0.1
         self.curr_velo = Twist()
         self.best_grasp = Pose()
         self.viewpoints = 0
