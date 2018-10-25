@@ -63,7 +63,7 @@ def depth_callback(depth_message):
         depth = bridge.imgmsg_to_cv2(depth_message)
         #  Crop a square out of the middle of the depth and resize it to 300*300
         crop_size = 400
-        crop_offset=40
+        crop_offset=0
         out_size = 300
 
         points_out, ang_out, width_out, depth_crop = predict(depth, crop_size, out_size=out_size, crop_y_offset=crop_offset)
@@ -136,7 +136,7 @@ def depth_callback(depth_message):
         grasp_img_plain.header = depth_message.header
         grasp_plain_pub.publish(grasp_img_plain)
 
-        depth_pub.publish(bridge.cv2_to_imgmsg(depth_crop.squeeze(), encoding=depth_message.encoding))
+        depth_pub.publish(bridge.cv2_to_imgmsg(depth_crop, encoding=depth_message.encoding))
 
         ang_pub.publish(bridge.cv2_to_imgmsg(ang_out))
 

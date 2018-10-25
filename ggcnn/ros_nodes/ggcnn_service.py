@@ -13,7 +13,7 @@ import dougsm_helpers.tf_helpers as tfh
 from tf import transformations as tft
 from dougsm_helpers.timeit import TimeIt
 
-from ggcnn.ggcnn import predict, process_depth_image
+from ggcnn.ggcnn_torch import predict, process_depth_image
 from dougsm_helpers.gridshow import gridshow
 
 from ggcnn.srv import GraspPrediction, GraspPredictionResponse
@@ -71,7 +71,7 @@ class GGCNNService:
 
             # Do grasp prediction
             depth_crop, depth_nan_mask = process_depth_image(depth, self.img_crop_size, 300, return_mask=True, crop_y_offset=self.img_crop_y_offset)
-            points, angle, width_img, _ = predict(depth_crop, process_depth=False, depth_nan_mask=depth_nan_mask, filters=(5.0, 2.0, 2.0))
+            points, angle, width_img, _ = predict(depth_crop, process_depth=False, depth_nan_mask=depth_nan_mask, filters=(2.0, 2.0, 2.0))
 
             angle -= np.arcsin(camera_rot[0, 1])  # Correct for the rotation of the camera
             angle = (angle + np.pi/2) % np.pi - np.pi/2 #Wrap [-np.pi/2, np.pi/2]

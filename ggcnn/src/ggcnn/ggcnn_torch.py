@@ -12,9 +12,10 @@ import torch
 
 from dougsm_helpers.timeit import TimeIt
 
-MODEL_FILE = '/home/guest/epoch_24_iou_0.82_morezoom'
+MODEL_FILE = 'models/epoch_24_iou_0.82_morezoom'
 here = path.dirname(path.abspath(__file__))
 sys.path.append(here)
+print(path.join(path.dirname(__file__), MODEL_FILE))
 model = torch.load(path.join(path.dirname(__file__), MODEL_FILE))
 device = torch.device("cuda:0")
 
@@ -67,8 +68,8 @@ def predict(depth, process_depth=True, crop_size=300, out_size=300, depth_nan_ma
         depth, depth_nan_mask = process_depth_image(depth, crop_size, out_size=out_size, return_mask=True, crop_y_offset=crop_y_offset)
 
     # Inference
-    depth = np.clip((depth - depth.mean()), -1, 1).reshape(1, 1, out_size, out_size)
-    depthT = torch.from_numpy(depth.astype(np.float32)).to(device)
+    depth = np.clip((depth - depth.mean()), -1, 1)
+    depthT = torch.from_numpy(depth.reshape(1, 1, out_size, out_size).astype(np.float32)).to(device)
     with torch.no_grad():
         pred_out = model(depthT)
 
@@ -100,4 +101,4 @@ def predict(depth, process_depth=True, crop_size=300, out_size=300, depth_nan_ma
 
     # points_out = (points_out - points_out.min())/(points_out.max() - points_out.min())
 
-    return points_out, ang_out, width_out, depth
+    return points_out, ang_out, width_out, depth.squeeze()

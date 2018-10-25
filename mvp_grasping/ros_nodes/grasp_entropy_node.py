@@ -17,7 +17,7 @@ import dougsm_helpers.tf_helpers as tfh
 from tf import transformations as tft
 from dougsm_helpers.timeit import TimeIt
 
-from ggcnn.ggcnn import predict, process_depth_image
+from ggcnn.ggcnn_torch import predict, process_depth_image
 from ggcnn.grasp import detect_grasps
 from mvp_grasping.grasp_stats import update_batch, update_histogram_angle
 from mvp_grasping.gridworld import GridWorld
@@ -128,7 +128,7 @@ class ViewpointEntropyCalculator:
 
                 # Clean the data a bit.
                 pos[depth_nan_mask.flatten() == 1, :] = 0  # Get rid of NaNs
-                pos[pos[:, 2] > 0.12, :] = 0  # Ignore obvious noise.
+                pos[pos[:, 2] > 0.17, :] = 0  # Ignore obvious noise.
                 pos[pos[:, 2] < 0.0, :] = 0  # Ignore obvious noise.
 
                 cell_ids = self.gw.pos_to_cell(pos[:, :2])
@@ -298,9 +298,9 @@ class ViewpointEntropyCalculator:
 
                 exp_inf_gain = (exp_inf_gain - exp_inf_gain.min())/(exp_inf_gain.max()-exp_inf_gain.min())*(exp_inf_gain_before.max()-exp_inf_gain_before.min())
                 show = gridshow('Display',
-                         [cv2.resize(points, hist_ent.shape), hist_mean, kl_divergence, exp_inf_gain, exp_inf_gain_before, self.gw.visited],
+                         [cv2.resize(points, hist_ent.shape), hist_mean, hist_ent, exp_inf_gain, exp_inf_gain_before, self.gw.visited],
                          [None, None, None, (exp_inf_gain.min(), exp_inf_gain_before.max()), (exp_inf_gain.min(), exp_inf_gain_before.max()), None],
-                         [cv2.COLORMAP_BONE] + [cv2.COLORMAP_JET, ] * 4 + [cv2.COLORMAP_BONE],
+                         [cv2.COLORMAP_JET] + [cv2.COLORMAP_JET, ] * 4 + [cv2.COLORMAP_BONE],
                          3,
                          False)
 
