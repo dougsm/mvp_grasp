@@ -63,18 +63,20 @@ class Logger:
 
 class Run:
     log_properties = [
+        'object',
         'success',
         'time',
         'quality',
     ]
 
-    def __init__(self, experiment):
+    def __init__(self, experiment, object=''):
         self.experiment = experiment
         self.viewpoints = None
         self.t0 = 0
         self.t1 = 0
         self.success = False
         self.qualtiy = None
+        self.object = object
 
     def start(self):
         self.t0 = time.time()
@@ -98,20 +100,33 @@ class Experiment:
         'success_rate',
         'mpph'
     ]
-    def __init__(self):
+    def __init__(self, objects=[]):
         self.runs = []
         exp_name = raw_input('Name of this experiment? ')
         self.logger = Logger(exp_name)
         self.logger.log_dict(rospy.get_param('/grasp_entropy_node'))
         self.logger.log_list(Run.log_properties + Experiment.log_properties)
         self.successes = 0
+        self.objects = objects
+        self.object_id = 0
+        self.object_count = 0
 
     def new_run(self):
-        return Run(self)
+        # self.object_count += 1
+        if self.object_count == 10:
+            self.object_count = 0
+            self.object_id += 1
+            if self.object_count >= len(self.objects):
+                rospy.logerr("THAT'S ALL FOLKS")
+                exit()
+            rospy.logerr("NEW OBJECT: %s" % self.objects[self.object_id])
+            raw_input('Enter To Confirm')
+        return Run(self, object=self.objects[self.object_id])
 
     def save_run(self, run):
         if run.success:
             self.successes += 1
+        self.object_count += 1
         self.runs.append(run)
         self.log_run(run)
 
@@ -156,13 +171,15 @@ class PandaOpenLoopGraspController:
 
         self.pregrasp_pose = [(rospy.get_param('/grasp_entropy_node/histogram/bounds/x2') + rospy.get_param('/grasp_entropy_node/histogram/bounds/x1'))/2 - 0.03,
                               (rospy.get_param('/grasp_entropy_node/histogram/bounds/y2') + rospy.get_param('/grasp_entropy_node/histogram/bounds/y1'))/2 + 0.10,
-                              rospy.get_param('/grasp_entropy_node/height/z1') + 0.05,
+                              rospy.get_param('/grasp_entropy_node/height/z1') + 0.0,
                               2**0.5/2, -2**0.5/2, 0, 0]
 
         self.last_weight = 0
         self.__weight_increase_check()
 
-        self.experiment = Experiment()
+        objects = ['clamp', 'gearbox', 'nozzle', 'part1', 'part3', 'pawn', 'turbine', 'vase']
+        # objects = ['Tape', 'Brush', 'Bear', 'Duck', 'Toothbrush', 'Ball', 'Die', 'Screwdriver', 'Clamp', 'Pen', 'Mug', 'Cable']
+        self.experiment = Experiment(objects=objects)
 
     def __recover_robot_from_error(self):
         rospy.logerr('Recovering')
@@ -173,7 +190,7 @@ class PandaOpenLoopGraspController:
     def __weight_increase_check(self):
         try:
             w = rospy.wait_for_message('/scales/weight', Int16, timeout=2).data
-            increased = w > self.last_weight
+            increased = w < self.last_weight
             self.last_weight = w
             return increased
         except:
@@ -203,8 +220,8 @@ class PandaOpenLoopGraspController:
 
             tfh.publish_pose_as_transform(best_grasp.pose, 'panda_link0', 'G', 0.5)
 
-            if raw_input('Continue?') == '0':
-                return False
+            # if raw_input('Continue?') == '0':
+            #     return False
 
             # Offset for initial pose.
             initial_offset = 0.10
@@ -214,9 +231,10 @@ class PandaOpenLoopGraspController:
             best_grasp.pose.position.z = max(best_grasp.pose.position.z - 0.01, 0.026)  # 0.021 = collision with ground
             best_grasp.pose.position.z += initial_offset + LINK_EE_OFFSET  # Offset from end efector position to
 
+            print('Width: ', best_grasp.width)
             self.pc.set_gripper(best_grasp.width, wait=False)
             rospy.sleep(0.1)
-            self.pc.goto_pose(best_grasp.pose, velocity=0.1)
+            self.pc.goto_pose(best_grasp.pose, velocity=0.25)
 
             # Reset the position
             best_grasp.pose.position.z -= initial_offset + LINK_EE_OFFSET
@@ -238,7 +256,7 @@ class PandaOpenLoopGraspController:
 
             # close the fingers.
             rospy.sleep(0.2)
-            self.pc.grasp(0, force=2)
+            self.pc.grasp(0, force=5)
 
             # Sometimes triggered by closing on something that pushes the robot
             if self.ROBOT_ERROR_DETECTED:
@@ -255,12 +273,12 @@ class PandaOpenLoopGraspController:
         raw_input('Press Enter to Start.')
         while not rospy.is_shutdown():
             self.cs.switch_controller('moveit')
-            self.pc.goto_named_pose('grip_ready', velocity=0.25)
-            self.pc.goto_pose(self.pregrasp_pose, velocity=0.25)
+            self.pc.goto_named_pose('grip_ready', velocity=0.5)
+            self.pc.goto_pose(self.pregrasp_pose, velocity=0.5)
             self.pc.set_gripper(0.1)
+            rospy.sleep(2.0)
 
-            self.cs.switch_controller('velocity')
-
+            self.__weight_increase_check()
             run = self.experiment.new_run()
             run.start()
             grasp_ret = self.__execute_best_grasp()
@@ -275,8 +293,7 @@ class PandaOpenLoopGraspController:
             # Release Object
             self.cs.switch_controller('moveit')
             self.pc.goto_named_pose('grip_ready', velocity=0.5)
-            self.pc.goto_named_pose('drop_box', velocity=0.5)
-            self.pc.set_gripper(0.07)
+            # self.pc.goto_named_pose('drop_box', velocity=0.5)
 
             # Check success using the scales.
             rospy.sleep(1.0)
