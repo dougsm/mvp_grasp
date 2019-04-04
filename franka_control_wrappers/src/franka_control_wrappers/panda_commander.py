@@ -1,23 +1,18 @@
-"""
-PandaCommander is a class which wraps some basic moveit functions
-for the Panda Robot.
-"""
-
 import rospy
 import actionlib
 
-from math import pi
-
 import moveit_commander
-from moveit_commander.conversions import pose_to_list, list_to_pose
+from moveit_commander.conversions import list_to_pose
 
-import geometry_msgs.msg
 import franka_gripper.msg
 from franka_control.msg import ErrorRecoveryActionGoal
-from std_msgs.msg import Empty
 
 
 class PandaCommander(object):
+    """
+    PandaCommander is a class which wraps some basic moveit functions for the Panda Robot,
+    and some via the panda API
+    """
     def __init__(self, group_name=None):
         self.robot = moveit_commander.RobotCommander()
         self.scene = moveit_commander.PlanningSceneInterface()
@@ -36,13 +31,16 @@ class PandaCommander(object):
             print("============ End effector: %s" % eef_link)
         else:
             print("============ No active planning group.")
-        group_names = self.robot.get_group_names()
         print("============ Robot Groups:", self.robot.get_group_names())
         print("============ Printing robot state")
         print(self.robot.get_current_state())
         print("")
 
     def set_group(self, group_name):
+        """
+        Set the active move group
+        :param group_name: move group name
+        """
         self.active_group = group_name
         if group_name is None:
             self.active_group = None
@@ -55,6 +53,13 @@ class PandaCommander(object):
             self.active_group = self.groups[group_name]
 
     def goto_joints(self, joint_values, group_name=None, wait=True):
+        """
+        Move to joint positions.
+        :param joint_values:  Array of joint positions
+        :param group_name:  Move group (use current if None)
+        :param wait:  Wait for completion if True
+        :return: Bool success
+        """
         if group_name:
             self.set_group(group_name)
         if not self.active_group:
@@ -71,6 +76,14 @@ class PandaCommander(object):
         return success
 
     def goto_pose(self, pose, velocity=1.0, group_name=None, wait=True):
+        """
+        Move to pose
+        :param pose: Array position & orientation [x, y, z, qx, qy, qz, qw]
+        :param velocity: Velocity (fraction of max) [0.0, 1.0]
+        :param group_name: Move group (use current if None)
+        :param wait: Wait for completion if True
+        :return: Bool success
+        """
         if group_name:
             self.set_group(group_name)
         if not self.active_group:
@@ -86,6 +99,14 @@ class PandaCommander(object):
         return success
 
     def goto_pose_cartesian(self, pose, velocity=1.0, group_name=None, wait=True):
+        """
+        Move to pose following a cartesian trajectory.
+        :param pose: Array position & orientation [x, y, z, qx, qy, qz, qw]
+        :param velocity: Velocity (fraction of max) [0.0, 1.0]
+        :param group_name: Move group (use current if None)
+        :param wait: Wait for completion if True
+        :return: Bool success
+        """
         if group_name:
             self.set_group(group_name)
         if not self.active_group:
@@ -97,19 +118,25 @@ class PandaCommander(object):
         self.active_group.set_max_velocity_scaling_factor(velocity)
         (plan, fraction) = self.active_group.compute_cartesian_path(
                                            [pose],   # waypoints to follow
-                                           0.005,        # eef_step
-                                           0.0)         # jump_threshold
+                                           0.005,    # eef_step
+                                           0.0)      # jump_threshold
         if fraction != 1.0:
             raise ValueError('Unable to plan entire path!')
-            return False
 
         success = self.active_group.execute(plan, wait=wait)
         self.active_group.stop()
         self.active_group.clear_pose_targets()
         return success
 
-
     def goto_named_pose(self, pose_name, velocity=1.0, group_name=None, wait=True):
+        """
+        Move to named pos
+        :param pose: Name of named pose
+        :param velocity: Velocity (fraction of max) [0.0, 1.0]
+        :param group_name: Move group (use current if None)
+        :param wait: Wait for completion if True
+        :return: Bool success
+        """
         if group_name:
             self.set_group(group_name)
         if not self.active_group:
@@ -122,12 +149,23 @@ class PandaCommander(object):
         return success
 
     def home_gripper(self):
+        """
+        Home and initialise the gripper
+        :return: Bool success
+        """
         client = actionlib.SimpleActionClient('franka_gripper/homing', franka_gripper.msg.HomingAction)
         client.wait_for_server()
         client.send_goal(franka_gripper.msg.HomingGoal())
         return client.wait_for_result()
 
     def set_gripper(self, width, speed=0.1, wait=True):
+        """
+        Set gripper with.
+        :param width: Width in metres
+        :param speed: Move velocity (m/s)
+        :param wait: Wait for completion if True
+        :return: Bool success
+        """
         client = actionlib.SimpleActionClient('franka_gripper/move', franka_gripper.msg.MoveAction)
         client.wait_for_server()
         client.send_goal(franka_gripper.msg.MoveGoal(width, speed))
@@ -137,6 +175,16 @@ class PandaCommander(object):
             return True
 
     def grasp(self, width=0, e_inner=0.1, e_outer=0.1, speed=0.1, force=1):
+        """
+        Wrapper around the franka_gripper/grasp action.
+        http://docs.ros.org/kinetic/api/franka_gripper/html/action/Grasp.html
+        :param width: Width (m) to grip
+        :param e_inner: epsilon inner
+        :param e_outer: epsilon outer
+        :param speed: Move velocity (m/s)
+        :param force: Force to apply (N)
+        :return: Bool success
+        """
         client = actionlib.SimpleActionClient('franka_gripper/grasp', franka_gripper.msg.GraspAction)
         client.wait_for_server()
         client.send_goal(
@@ -150,36 +198,15 @@ class PandaCommander(object):
         return client.wait_for_result()
 
     def stop(self):
+        """
+        Stop the current movement.
+        """
         if self.active_group:
             self.active_group.stop()
 
     def recover(self):
+        """
+        Call the error reset action server.
+        """
         self.reset_publisher.publish(ErrorRecoveryActionGoal())
         rospy.sleep(3.0)
-
-if __name__ == '__main__':
-    rospy.init_node('panda_commander_test', anonymous=True)
-    pc = PandaCommander(group_name='panda_arm_hand')
-
-    pc.goto_pose_cartesian(1)
-    exit()
-
-    pc.home_gripper()
-    pc.grasp()
-    rospy.sleep(2)
-    pc.set_gripper(0.15, 0.02)
-
-    # pc.print_debug_info()
-    #
-    # pc.goto_joints([0, -pi/4, 0, -pi/2, 0, pi/3, 0], 'panda_arm_hand')
-    #
-    # pose_goal = geometry_msgs.msg.Pose()
-    # pose_goal.orientation.x = 1.0
-    # pose_goal.position.x = 0.4
-    # pose_goal.position.y = 0.1
-    # pose_goal.position.z = 0.4
-    # pc.goto_pose(pose_goal)
-    #
-    pc.goto_pose([0.3, -0.1, 0.3, 1.0, 0, 0, 0])
-
-    pc.goto_named_pose('ready')
