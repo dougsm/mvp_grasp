@@ -44,7 +44,6 @@ int main(int argc, char **argv)
 
   // Open the scales using the VID, PID,
   // and optionally the Serial number. Replace with NULL for generic serial Number
-  //TODO make serial a rosparam so that multiple scales can be used
   handle = hid_open(0x0922, 0x8003, szSerial);
   if(handle == NULL) {
     handle = hid_open(0x922, 0x8006, szSerial);
