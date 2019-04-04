@@ -1,18 +1,27 @@
 import rospy
 import controller_manager_msgs.srv as cm_srv
 
-class ControlSwitcher:
-    def __init__(self, controllers, controller_manager_node='/controller_manager'):
-        # Dictionary of controllers to manager/switch:
-        # {nick_name: controller_full_name}
-        self.controllers = controllers
 
+class ControlSwitcher:
+    """
+    Class to simplify the act of switching between ROS controllers.
+    """
+    def __init__(self, controllers, controller_manager_node='/controller_manager'):
+        """
+        :param controllers: Dictionary of controllers to manager/switch: {nick_name: controller_full_name}
+        :param controller_manager_node: name of controller manager node.
+        """
+        self.controllers = controllers
         rospy.wait_for_service(controller_manager_node + '/switch_controller')
         rospy.wait_for_service(controller_manager_node + '/list_controllers')
         self.switcher_srv = rospy.ServiceProxy(controller_manager_node + '/switch_controller', cm_srv.SwitchController)
         self.lister_srv = rospy.ServiceProxy(controller_manager_node + '/list_controllers', cm_srv.ListControllers)
 
     def switch_controller(self, controller_name):
+        """
+        :param controller_name: Controller to activate.
+        :return: Success True/False
+        """
         rospy.sleep(0.5)
         start_controllers = [self.controllers[controller_name]]
         stop_controllers = [self.controllers[n] for n in self.controllers if n != controller_name]
@@ -24,7 +33,7 @@ class ControlSwitcher:
 
         res = self.switcher_srv(controller_switch_msg).ok
         if res:
-            # rospy.loginfo('Successfully switched to controller %s (%s)' % (controller_name, self.controllers[controller_name]))
+            rospy.logdebug('Successfully switched to controller %s (%s)' % (controller_name, self.controllers[controller_name]))
             return res
         else:
             return False

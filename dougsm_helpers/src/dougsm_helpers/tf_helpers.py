@@ -1,16 +1,20 @@
-# Helper Functions for Robot Movement
+# Helper Functions for interfacing with TF2
 # Stolen from the ACRV 2017 Amazon Robotics Challenge
+
 import rospy
 import geometry_msgs.msg as gmsg
 import tf2_ros
 import tf2_geometry_msgs
 
+
 # Create buffer and listener
 tfBuffer = tf2_ros.Buffer()
 listener = tf2_ros.TransformListener(tfBuffer)
 
+
 def quaternion_to_list(quaternion):
     return [quaternion.x, quaternion.y, quaternion.z, quaternion.w]
+
 
 def list_to_quaternion(l):
     q = gmsg.Quaternion()
@@ -20,6 +24,7 @@ def list_to_quaternion(l):
     q.w = l[3]
     return q
 
+
 def convert_pose(pose, from_frame, to_frame):
     """
     Convert a pose or transform between frames using tf.
@@ -28,9 +33,6 @@ def convert_pose(pose, from_frame, to_frame):
         to_frame        -> A string that defines the desired reference_frame of the robot to convert to
     """
     global tfBuffer, listener
-
-    # Create Listener objet to recieve and buffer transformations
-    trans = None
 
     try:
         trans = tfBuffer.lookup_transform(to_frame, from_frame, rospy.Time(0), rospy.Duration(1.0))
@@ -112,7 +114,6 @@ def publish_pose_as_transform(pose, reference_frame, name, seconds=1):
     """
 
     # Create a broadcast node and a stamped transform to broadcast
-    br = tf2_ros.TransformBroadcaster()
     t = gmsg.TransformStamped()
 
     # Prepare broadcast message

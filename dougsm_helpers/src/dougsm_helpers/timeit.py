@@ -1,5 +1,6 @@
 import time
 
+
 class TimeIt:
     print_output = True
     last_parent = None
