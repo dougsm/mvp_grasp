@@ -76,7 +76,7 @@ class GGCNNService:
             # Mask Points Here
 
             angle -= np.arcsin(camera_rot[0, 1])  # Correct for the rotation of the camera
-            angle = (angle + np.pi/2) % np.pi - np.pi/2  #Wrap [-np.pi/2, np.pi/2]
+            angle = (angle + np.pi/2) % np.pi - np.pi/2  # Wrap [-np.pi/2, np.pi/2]
 
             # Convert to 3D positions.
             imh, imw = depth.shape

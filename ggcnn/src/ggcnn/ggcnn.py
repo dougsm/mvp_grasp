@@ -13,48 +13,48 @@ MODEL_FILE = 'models/epoch_29_model.hdf5'
 model = load_model(path.join(path.dirname(__file__), MODEL_FILE))
 graph = tf.get_default_graph()
 
+TimeIt.print_output = False  # For debugging/timing
+
 
 def process_depth_image(depth, crop_size, out_size=300, return_mask=False, crop_y_offset=0):
     imh, imw = depth.shape
 
-    with TimeIt('1'):
-        # Crop.
-        depth_crop = depth[(imh - crop_size) // 2 - crop_y_offset:(imh - crop_size) // 2 + crop_size - crop_y_offset,
-                           (imw - crop_size) // 2:(imw - crop_size) // 2 + crop_size]
-    # depth_nan_mask = np.isnan(depth_crop).astype(np.uint8)
+    with TimeIt('Process Depth Image'):
+        with TimeIt('Crop'):
+            # Crop.
+            depth_crop = depth[(imh - crop_size) // 2 - crop_y_offset:(imh - crop_size) // 2 + crop_size - crop_y_offset,
+                               (imw - crop_size) // 2:(imw - crop_size) // 2 + crop_size]
 
-    # Inpaint
-    # OpenCV inpainting does weird things at the border.
-    with TimeIt('2'):
-        depth_crop = cv2.copyMakeBorder(depth_crop, 1, 1, 1, 1, cv2.BORDER_DEFAULT)
-        depth_nan_mask = np.isnan(depth_crop).astype(np.uint8)
+        # Inpaint
+        # OpenCV inpainting does weird things at the border.
+        with TimeIt('Inpainting_Processing'):
+            depth_crop = cv2.copyMakeBorder(depth_crop, 1, 1, 1, 1, cv2.BORDER_DEFAULT)
+            depth_nan_mask = np.isnan(depth_crop).astype(np.uint8)
 
-    with TimeIt('3'):
-        depth_crop[depth_nan_mask==1] = 0
+            depth_crop[depth_nan_mask==1] = 0
 
-    with TimeIt('4'):
-        # Scale to keep as float, but has to be in bounds -1:1 to keep opencv happy.
-        depth_scale = np.abs(depth_crop).max()
-        depth_crop = depth_crop.astype(np.float32) / depth_scale  # Has to be float32, 64 not supported.
+            # Scale to keep as float, but has to be in bounds -1:1 to keep opencv happy.
+            depth_scale = np.abs(depth_crop).max()
+            depth_crop = depth_crop.astype(np.float32) / depth_scale  # Has to be float32, 64 not supported.
 
-        with TimeIt('Inpainting'):
-            depth_crop = cv2.inpaint(depth_crop, depth_nan_mask, 1, cv2.INPAINT_NS)
+            with TimeIt('Inpainting'):
+                depth_crop = cv2.inpaint(depth_crop, depth_nan_mask, 1, cv2.INPAINT_NS)
 
-        # Back to original size and value range.
-        depth_crop = depth_crop[1:-1, 1:-1]
-        depth_crop = depth_crop * depth_scale
+            # Back to original size and value range.
+            depth_crop = depth_crop[1:-1, 1:-1]
+            depth_crop = depth_crop * depth_scale
 
-    with TimeIt('5'):
-        # Resize
-        depth_crop = cv2.resize(depth_crop, (out_size, out_size), cv2.INTER_AREA)
+        with TimeIt('Resizing'):
+            # Resize
+            depth_crop = cv2.resize(depth_crop, (out_size, out_size), cv2.INTER_AREA)
 
-    if return_mask:
-        with TimeIt('6'):
-            depth_nan_mask = depth_nan_mask[1:-1, 1:-1]
-            depth_nan_mask = cv2.resize(depth_nan_mask, (out_size, out_size), cv2.INTER_NEAREST)
-        return depth_crop, depth_nan_mask
-    else:
-        return depth_crop
+        if return_mask:
+            with TimeIt('Return Mask'):
+                depth_nan_mask = depth_nan_mask[1:-1, 1:-1]
+                depth_nan_mask = cv2.resize(depth_nan_mask, (out_size, out_size), cv2.INTER_NEAREST)
+            return depth_crop, depth_nan_mask
+        else:
+            return depth_crop
 
 
 def predict(depth, process_depth=True, crop_size=300, out_size=300, depth_nan_mask=None, filters=(2.0, 1.0, 1.0)):

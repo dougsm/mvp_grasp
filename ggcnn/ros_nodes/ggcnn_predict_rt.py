@@ -34,10 +34,6 @@ cmd_pub = rospy.Publisher('ggcnn/out/command', Float32MultiArray, queue_size=1)
 
 # Initialise some globals.
 prev_mp = np.array([150, 150])
-ROBOT_Z = 0
-
-# Tensorflow graph to allow use in callback.
-graph = tf.get_default_graph()
 
 # Get the camera parameters
 camera_info_msg = rospy.wait_for_message('/camera/depth/camera_info', CameraInfo)
@@ -47,16 +43,9 @@ cx = K[2]
 fy = K[4]
 cy = K[5]
 
-def robot_pos_callback(data):
-    global ROBOT_Z
-    ROBOT_Z = data.pose.position.z
-
 
 def depth_callback(depth_message):
-    global model
-    global graph
     global prev_mp
-    global ROBOT_Z
     global fx, cx, fy, cy
 
     with TimeIt('Predict'):
@@ -68,8 +57,6 @@ def depth_callback(depth_message):
 
         points_out, ang_out, width_out, depth_crop = predict(depth, crop_size, out_size=out_size, crop_y_offset=crop_offset)
 
-        # points_out[points_out < points_out.max()/4] = 0
-
     with TimeIt('Calculate Depth'):
         # Figure out roughly the depth in mm of the part between the grippers for collision avoidance.
         depth_center = depth_crop[100:141, 130:171].flatten()
@@ -79,10 +66,9 @@ def depth_callback(depth_message):
     with TimeIt('Control'):
         # Calculate the best pose from the camera intrinsics.
         maxes = None
-
         ALWAYS_MAX = True  # Use ALWAYS_MAX = True for the open-loop solution.
 
-        if ROBOT_Z > 0.34 or ALWAYS_MAX:  # > 0.34 initialises the max tracking when the robot is reset.
+        if ALWAYS_MAX:
             # Track the global max.
             max_pixel = np.array(np.unravel_index(np.argmax(points_out), points_out.shape))
             prev_mp = max_pixel.astype(np.int)
@@ -116,8 +102,6 @@ def depth_callback(depth_message):
 
     with TimeIt('Draw'):
         # Draw grasp markers on the points_out and publish it. (for visualisation)
-        # grasp_img = np.zeros((300, 300, 3), dtype=np.uint8)
-        # grasp_img[:,:,2] = (points_out * 255.0)
         grasp_img = cv2.applyColorMap((points_out * 255).astype(np.uint8), cv2.COLORMAP_JET)
         grasp_img_plain = grasp_img.copy()
 
@@ -147,7 +131,6 @@ def depth_callback(depth_message):
 
 
 depth_sub = rospy.Subscriber('/camera/depth/image_meters', Image, depth_callback, queue_size=1)
-# robot_pos_sub = rospy.Subscriber('/m1n6s200_driver/out/tool_pose', PoseStamped, robot_pos_callback, queue_size=1)
 
 while not rospy.is_shutdown():
     rospy.spin()

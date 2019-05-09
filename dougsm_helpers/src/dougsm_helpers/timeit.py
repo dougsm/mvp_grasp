@@ -2,6 +2,9 @@ import time
 
 
 class TimeIt:
+    """
+    Print nested timing information.
+    """
     print_output = True
     last_parent = None
     level = -1
@@ -21,7 +24,7 @@ class TimeIt:
 
     def __exit__(self, t, value, traceback):
         self.t1 = time.time()
-        st = '%s%s: %0.1fms' % ('  ' * TimeIt.level, self.s, (sel.t1 - self.t0)*1000)
+        st = '%s%s: %0.1fms' % ('  ' * TimeIt.level, self.s, (self.t1 - self.t0)*1000)
         TimeIt.level -= 1
 
         if self.parent:
