@@ -5,13 +5,14 @@ import numpy as np
 import scipy.ndimage as ndimage
 
 import tensorflow as tf
-from keras.models import load_model
+from tensorflow.keras.models import load_model
 
 from dougsm_helpers.timeit import TimeIt
 
 MODEL_FILE = 'models/epoch_29_model.hdf5'
 model = load_model(path.join(path.dirname(__file__), MODEL_FILE))
 graph = tf.get_default_graph()
+
 
 def process_depth_image(depth, crop_size, out_size=300, return_mask=False, crop_y_offset=0):
     imh, imw = depth.shape
@@ -67,7 +68,6 @@ def predict(depth, process_depth=True, crop_size=300, out_size=300, depth_nan_ma
 
     points_out = pred_out[0].squeeze()
     points_out[depth_nan_mask] = 0
-    # points_out = points_out ** 2
 
     # Calculate the angle map.
     cos_out = pred_out[1].squeeze()
@@ -85,12 +85,5 @@ def predict(depth, process_depth=True, crop_size=300, out_size=300, depth_nan_ma
         width_out = ndimage.filters.gaussian_filter(width_out, filters[2])
 
     points_out = np.clip(points_out, 0.0, 1.0-1e-3)
-
-    # SM
-    # temp = 0.15
-    # ep = np.exp(points_out / temp)
-    # points_out = ep / ep.sum()
-
-    # points_out = (points_out - points_out.min())/(points_out.max() - points_out.min())
 
     return points_out, ang_out, width_out, depth

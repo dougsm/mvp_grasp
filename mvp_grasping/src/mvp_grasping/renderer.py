@@ -20,7 +20,7 @@ class Renderer:
 
         self.objects = []
 
-        if DEBUG:depth.shape[1]
+        if DEBUG:
             self.cid = pb.connect(pb.GUI)
         else:
             self.cid = pb.connect(pb.DIRECT)

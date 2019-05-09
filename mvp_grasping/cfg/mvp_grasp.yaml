@@ -13,7 +13,7 @@ grasp_entropy_node:
         dist_from_best_scale: 0.15
         dist_from_best_gain: 0.2
         dist_from_prev_view_scale: 0.0
-        dist_from_prev_view_gain: 0.05
+        dist_from_prev_view_gain: 0.0
     height:
         z1: 0.55
         z2: 0.40

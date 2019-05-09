@@ -59,9 +59,3 @@ if __name__ == '__main__':
     print(cell_ids)
 
     print(h.cell_to_pos(cell_ids))
-
-    #surf_x_pos = h.cell_to_pos(np.vstack((np.arange(h.shape[0]), np.zeros(h.shape[0]))).T)
-    #surf_y_pos = h.cell_to_pos(np.vstack((np.zeros(h.shape[1]), np.arange(h.shape[1]))).T)
-
-    #print(surf_x_pos)
-    #print(surf_y_pos)

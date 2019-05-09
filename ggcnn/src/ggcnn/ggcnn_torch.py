@@ -5,9 +5,6 @@ import cv2
 import numpy as np
 import scipy.ndimage as ndimage
 
-# import tensorflow as tf
-# from keras.models import load_model
-
 import torch
 
 from dougsm_helpers.timeit import TimeIt
@@ -75,7 +72,6 @@ def predict(depth, process_depth=True, crop_size=300, out_size=300, depth_nan_ma
 
     points_out = pred_out[0].cpu().numpy().squeeze()
     points_out[depth_nan_mask] = 0
-    # points_out = points_out ** 2
 
     # Calculate the angle map.
     cos_out = pred_out[1].cpu().numpy().squeeze()

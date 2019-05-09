@@ -17,13 +17,13 @@ from ggcnn.ggcnn import predict, process_depth_image
 from dougsm_helpers.gridshow import gridshow
 
 from ggcnn.srv import GraspPrediction, GraspPredictionResponse
-from geometry_msgs.msg import Point, Twist
 from sensor_msgs.msg import Image, CameraInfo
 
 import cv_bridge
 bridge = cv_bridge.CvBridge()
 
 TimeIt.print_output = False
+
 
 class GGCNNService:
     def __init__(self):
@@ -76,7 +76,7 @@ class GGCNNService:
             # Mask Points Here
 
             angle -= np.arcsin(camera_rot[0, 1])  # Correct for the rotation of the camera
-            angle = (angle + np.pi/2) % np.pi - np.pi/2 #Wrap [-np.pi/2, np.pi/2]
+            angle = (angle + np.pi/2) % np.pi - np.pi/2  #Wrap [-np.pi/2, np.pi/2]
 
             # Convert to 3D positions.
             imh, imw = depth.shape
@@ -109,6 +109,7 @@ class GGCNNService:
             self.img_pub.publish(bridge.cv2_to_imgmsg(show))
 
             return ret
+
 
 if __name__ == '__main__':
     rospy.init_node('ggcnn_service')

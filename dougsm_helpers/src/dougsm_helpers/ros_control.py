@@ -5,6 +5,7 @@ import controller_manager_msgs.srv as cm_srv
 class ControlSwitcher:
     """
     Class to simplify the act of switching between ROS controllers.
+    Wraps an interface to /controller_manager/switch_controller.
     """
     def __init__(self, controllers, controller_manager_node='/controller_manager'):
         """

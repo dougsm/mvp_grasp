@@ -26,7 +26,6 @@ class BoundingBoxes:
         return self.bbs.__iter__()
 
     def __getattr__(self, attr):
-        # Fuck yeah python.
         if hasattr(BoundingBox, attr) and callable(getattr(BoundingBox, attr)):
             return lambda *args, **kwargs: list(map(lambda bb: getattr(bb, attr)(*args, **kwargs), self.bbs))
         else:

@@ -101,6 +101,7 @@ void CartesianVelocityNodeController::starting(const ros::Time& /* time */) {
 }
 
 void CartesianVelocityNodeController::cartesian_velocity_callback(const geometry_msgs::Twist::ConstPtr& msg) {
+  // Callback for ROS message
   velocity_command[0] = msg->linear.x;
   velocity_command[1] = msg->linear.y;
   velocity_command[2] = msg->linear.z;
@@ -113,14 +114,17 @@ void CartesianVelocityNodeController::cartesian_velocity_callback(const geometry
 
 void CartesianVelocityNodeController::update(const ros::Time& /* time */,
                                                 const ros::Duration& period) {
+  // Update the controller at 1kHz
   time_since_last_command += period;
 
+  // If no message received in set time,
   if(time_since_last_command.toSec() > max_duration_between_commands) {
     velocity_command = {{0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
   }
 
   auto state = state_handle_->getRobotState();
 
+  // Check for contacts
   if(stop_on_contact) {
     for (size_t i = 0; i < state.cartesian_contact.size(); i++) {
       if(state.cartesian_contact[i]) {

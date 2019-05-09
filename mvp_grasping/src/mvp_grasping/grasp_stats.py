@@ -1,32 +1,7 @@
 import numpy as np
-# from dougsm_heplers.timeit import TimeIt
 
-# def update_batch(data, ids, count, mean, var):
-#
-#     if ids.ndim == 2:
-#         ids = tuple(ids.T)
-#
-#     count_temp = np.zeros_like(count)
-#     mean_temp = np.zeros_like(mean)
-#     var_temp = np.zeros_like(var)
-#     new_mean = np.zeros_like(count_temp[ids])
-#
-#     # Numba doesn't like np.add.at
-#     np.add.at(count_temp, ids, 1)
-#     np.add.at(mean_temp, ids, data)
-#     mean_temp[ids] /= count_temp[ids]
-#
-#     np.add.at(var_temp, ids, (data - mean_temp[ids]) ** 2)
-#     var_temp[ids] /= count_temp[ids]
-#
-#     new_mean[:] = (count[ids] * mean[ids] + count_temp[ids] * mean_temp[ids]) / (count[ids] + count_temp[ids])
-#     var[ids] = ((count[ids] * (var[ids] + (mean[ids] - new_mean) ** 2)) +
-#                count_temp[ids] * (var_temp[ids] + (mean_temp[ids] - new_mean) ** 2)) / (count[ids] + count_temp[ids])
-#     mean[ids] = new_mean
-#     count += count_temp
 
 def update_batch(data, ids, count, mean, var):
-
     ids_r = ids[:, 0] * count.shape[1] + ids[:, 1]
     ids_r_u, ids_r_u_i = np.unique(ids_r, return_inverse=True)  # TODO: This is by far the slowest part of this function.
     ids_r_u = (ids_r_u, )
@@ -111,7 +86,6 @@ def update_histogram_angle(data, angle, ids, histogram):
     histogram[ids_unr] += hist_count
 
 
-# @jit((float32, int32, int32, float32, float32))
 def update_sequential(data, ids, count, mean, m2):
 
     if ids.ndim == 2:
@@ -124,36 +98,3 @@ def update_sequential(data, ids, count, mean, m2):
         mean[ind] += delta/count[ind]
         m2[ind] += delta * (v - mean[ind])
 
-
-# if __name__ == '__main__':
-#     datapoints = 9000
-#     bins = (5, 5)
-#
-#     data = np.random.randn(datapoints) + 3
-#     ids = np.random.randint(0, bins[0], (datapoints, 2))
-#     # print('Normal:\t', np.mean(data), np.var(data))
-#
-#     count = np.zeros(bins)
-#     mean = np.zeros(bins)
-#     var = np.zeros(bins)
-#     with TimeIt('Batch'):
-#             update_batch_numba(data[:datapoints//2], ids[:datapoints//2], count, mean, var)
-#             update_batch_numba(data[datapoints//2:], ids[datapoints//2:], count, mean, var)
-#     print('Batch: \t', count, mean, var)
-#
-#     count = np.zeros(bins)
-#     mean = np.zeros(bins)
-#     var = np.zeros(bins)
-#     with TimeIt('Batch'):
-#             update_batch(data[:datapoints//2], ids[:datapoints//2], count, mean, var)
-#             update_batch(data[datapoints//2:], ids[datapoints//2:], count, mean, var)
-#     print('Batch: \t', count, mean, var)
-#
-#
-#     count = np.zeros(bins)
-#     mean = np.zeros(bins)
-#     var = np.zeros(bins)
-#     with TimeIt('Sequential'):
-#         update_sequential(data[:datapoints//2], ids[:datapoints//2], count, mean, var)
-#         update_sequential(data[datapoints//2:], ids[datapoints//2:], count, mean, var)
-#     print('Sequential:\t', count, mean, var/count)
