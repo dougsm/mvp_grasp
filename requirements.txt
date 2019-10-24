@@ -2,7 +2,7 @@ h5py==2.9.0
 matplotlib==2.2.4
 numpy==1.16.2
 opencv-python==4.0.0.21
-Pillow==6.0.0
+Pillow==6.2.0
 pybullet==2.4.8
 rospkg==1.1.7
 scikit-image==0.14.2
