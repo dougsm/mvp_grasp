@@ -14,7 +14,7 @@ import dougsm_helpers.tf_helpers as tfh
 from tf import transformations as tft
 from dougsm_helpers.timeit import TimeIt
 
-from ggcnn.ggcnn_torch import predict, process_depth_image
+from ggcnn.ggcnn import predict, process_depth_image
 from mvp_grasping.grasp_stats import update_batch, update_histogram_angle
 from mvp_grasping.gridworld import GridWorld
 from dougsm_helpers.gridshow import gridshow
