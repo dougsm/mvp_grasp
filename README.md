@@ -47,7 +47,7 @@ This code is designed around a Franka Emika Panda robot using an Intel Realsense
 
 **Installation:**
 
-Clone this repository into your ROS worksapce and run `catkin make`
+Clone this repository into your ROS worksapce and run `rosdep install --from-paths src --ignore-src --rosdistro=<your_rosdistro> -y` and then `catkin_make`/`catkin build`.
 
 **Local python requirements can be installed by:**
 
@@ -74,8 +74,8 @@ roslaunch mvp_grasping robot_bringup.launch
 # Start the camera, depth conversion and static transform
 roslaunch mvp_grasping wrist_realsense.launch
 
-# Start the scales interface
-roslaunch scales_interface scales.launch
+# # Start the scales interface (disabled by default, useful if you have compatible scales)
+# roslaunch scales_interface scales.launch
 
 # Start the Multi-View Picking backend
 roslaunch mvp_grasping grasp_entropy_service.launch
