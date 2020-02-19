@@ -29,6 +29,10 @@ class Logger:
         dt = datetime.datetime.now().strftime('%m%d_%H%M%S')
         self.out_file = os.path.join(output_dir, '%s_%s.txt' % (dt, output_desc))
 
+        dirname = os.path.dirname(self.out_file)
+        if not os.path.exists(dirname):
+            os.makedirs(dirname)
+
     def write_line(self, l):
         with open(self.out_file, 'a') as f:
             f.write(l)
@@ -362,4 +366,3 @@ class BaseGraspController(object):
             run.entropy = self.best_grasp.entropy
             run.viewpoints = self.viewpoints
             run.save()
-
