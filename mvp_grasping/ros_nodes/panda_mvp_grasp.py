@@ -17,6 +17,9 @@ class MVPGraspController(BaseGraspController):
         super(MVPGraspController, self).__init__()
         self.update_rate = 10.0  # Hz
 
+    def trigger_update(self):
+        super(MVPGraspController, self).trigger_update()
+
     def __velo_control_loop(self):
         """
         Perform velocity control using the MVP controller.
@@ -36,7 +39,7 @@ class MVPGraspController(BaseGraspController):
             ctr += 1
             if ctr >= self.curr_velocity_publish_rate/self.update_rate:
                 ctr = 0
-                self.__trigger_update()
+                self.trigger_update()
 
             # Cartesian Contact
             if any(self.robot_state.cartesian_contact):
@@ -54,6 +57,32 @@ class MVPGraspController(BaseGraspController):
             r.sleep()
 
         return not rospy.is_shutdown()
+
+
+    def setup_velocity_control_loop(self):
+        super(MVPGraspController, self).setup_velocity_control_loop()
+
+    def execute_velocity_control_loop(self):
+        """Perform the velocity control portion."""
+        self._in_velo_loop = True
+        velo_ok = self.__velo_control_loop()
+        self._in_velo_loop = False
+        return velo_ok
+
+
+    def execute_best_grasp(self):
+        super(MVPGraspController, self).execute_best_grasp()
+
+
+    def release_object(self):
+        super(MVPGraspController, self).release_object()
+
+
+    def check_success_using_scales(self, run):
+        super(MVPGraspController, self).check_success_using_scales(run)
+
+    def go(self):
+        super(MVPGraspController, self).go()
 
 
 if __name__ == '__main__':
