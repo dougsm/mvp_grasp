@@ -6,4 +6,4 @@ Pillow==6.2.0
 pybullet==2.4.8
 rospkg==1.1.7
 scikit-image==0.14.2
-tensorflow-gpu==1.11.0
+tensorflow-gpu==1.15.0

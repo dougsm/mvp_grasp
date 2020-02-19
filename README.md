@@ -38,7 +38,7 @@ Any questions or comments contact [Doug Morrison](mailto:doug.morrison@roboticvi
 
 **Hardware:**
 
-This code is designed around a Franka Emika Panda robot using an Intel Realsense D435 camera mounted on the wrist.  A 3D-printalbe camera mount is available in the `cad` folder. DYMO M10 scales are used to detect grasp success.
+This code is designed around a Franka Emika Panda robot using an Intel Realsense D435 camera mounted on the wrist.  A 3D-printalbe camera mount is available in the `cad` folder. DYMO M10 scales are used to detect grasp success (*Optional*.  See the scales_interface directry for more information).
 
 **The following external packages are required to run everything completely:**
 * [ROS Kinetic](http://wiki.ros.org/kinetic/Installation)

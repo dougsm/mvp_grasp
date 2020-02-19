@@ -6,10 +6,17 @@ import geometry_msgs.msg as gmsg
 import tf2_ros
 import tf2_geometry_msgs
 
+# Lazy create on use (convert_pose) to avoid errors.
+tfBuffer = None
+listener = None
 
-# Create buffer and listener
-tfBuffer = tf2_ros.Buffer()
-listener = tf2_ros.TransformListener(tfBuffer)
+
+def _init_tf():
+    # Create buffer and listener
+    # Something has changed in tf that means this must happen after init_node
+    global tfBuffer, listener
+    tfBuffer = tf2_ros.Buffer()
+    listener = tf2_ros.TransformListener(tfBuffer)
 
 
 def quaternion_to_list(quaternion):
@@ -33,6 +40,9 @@ def convert_pose(pose, from_frame, to_frame):
         to_frame        -> A string that defines the desired reference_frame of the robot to convert to
     """
     global tfBuffer, listener
+
+    if tfBuffer is None or listener is None:
+        _init_tf()
 
     try:
         trans = tfBuffer.lookup_transform(to_frame, from_frame, rospy.Time(0), rospy.Duration(1.0))
