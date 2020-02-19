@@ -80,7 +80,7 @@ class Run:
         self.t0 = 0
         self.t1 = 0
         self.success = False
-        self.qualtiy = None
+        self.quality = None
         self.entropy = None
 
     def start(self):
@@ -143,7 +143,7 @@ class Experiment:
 
 class BaseGraspController(object):
     """
-    An base class for performing grasping experiments with the Panda robot.
+    A base class for performing grasping experiments with the Panda robot.
     """
     def __init__(self):
         entropy_node_name = '/grasp_entropy_node'
@@ -261,7 +261,7 @@ class BaseGraspController(object):
 
             # Add some limits, plus a starting offset.
             self.best_grasp.pose.position.z = max(self.best_grasp.pose.position.z - 0.01, 0.026)  # 0.021 = collision with ground
-            self.best_grasp.pose.position.z += initial_offset + LINK_EE_OFFSET  # Offset from end efector position to
+            self.best_grasp.pose.position.z += initial_offset + LINK_EE_OFFSET  # Offset from end effector position to
 
             self.pc.set_gripper(self.best_grasp.width, wait=False)
             rospy.sleep(0.1)
