@@ -51,11 +51,11 @@ def depth_callback(depth_message):
     with TimeIt('Predict'):
         depth = bridge.imgmsg_to_cv2(depth_message)
         #  Crop a square out of the middle of the depth and resize it to 300*300
-        crop_size = 400
-        crop_offset=0
+        crop_size = 300
+        crop_offset = 40
         out_size = 300
-
-        points_out, ang_out, width_out, depth_crop = predict(depth, crop_size, out_size=out_size, crop_y_offset=crop_offset)
+        
+        points_out, ang_out, width_out, depth_crop = predict(depth, crop_size=crop_size, out_size=out_size, crop_y_offset=crop_offset, filters=(2.0, 2.0, 2.0))
 
     with TimeIt('Calculate Depth'):
         # Figure out roughly the depth in mm of the part between the grippers for collision avoidance.

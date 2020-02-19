@@ -6,12 +6,16 @@ import scipy.ndimage as ndimage
 
 import tensorflow as tf
 from tensorflow.keras.models import load_model
+from tensorflow.keras.backend import set_session
 
 from dougsm_helpers.timeit import TimeIt
 
 MODEL_FILE = 'models/epoch_29_model.hdf5'
-model = load_model(path.join(path.dirname(__file__), MODEL_FILE))
+sess = tf.Session()
+set_session(sess)
 graph = tf.get_default_graph()
+model = load_model(path.join(path.dirname(__file__), MODEL_FILE))
+
 
 TimeIt.print_output = False  # For debugging/timing
 
@@ -30,6 +34,9 @@ def process_depth_image(depth, crop_size, out_size=300, return_mask=False, crop_
         with TimeIt('Inpainting_Processing'):
             depth_crop = cv2.copyMakeBorder(depth_crop, 1, 1, 1, 1, cv2.BORDER_DEFAULT)
             depth_nan_mask = np.isnan(depth_crop).astype(np.uint8)
+
+            kernel = np.ones((3, 3),np.uint8)
+            depth_nan_mask = cv2.dilate(depth_nan_mask, kernel, iterations=1)
 
             depth_crop[depth_nan_mask==1] = 0
 
@@ -57,12 +64,14 @@ def process_depth_image(depth, crop_size, out_size=300, return_mask=False, crop_
             return depth_crop
 
 
-def predict(depth, process_depth=True, crop_size=300, out_size=300, depth_nan_mask=None, filters=(2.0, 1.0, 1.0)):
+def predict(depth, process_depth=True, crop_size=300, out_size=300, depth_nan_mask=None, filters=(2.0, 1.0, 1.0), crop_y_offset=0):
+    global graph, sess
     if process_depth:
-        depth, depth_nan_mask = process_depth_image(depth, crop_size, out_size, True)
+        depth, depth_nan_mask = process_depth_image(depth, crop_size, out_size, True, crop_y_offset=crop_y_offset)
 
     # Inference
     depth = np.clip((depth - depth.mean()), -1, 1)
+    set_session(sess)
     with graph.as_default():
         pred_out = model.predict(depth.reshape((1, 300, 300, 1)))
 

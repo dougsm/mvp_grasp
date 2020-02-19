@@ -18,6 +18,8 @@ limitations under the License.
 A launch file, derived from rgbd_launch and customized for Realsense ROS driver,
 to publish XYZRGB point cloud like an OpenNI camera.
 
+NOTICE: To use this launch file you must first install ros package rgbd_launch.
+
 To launch Realsense with software registeration (ROS Image Pipeline and rgbd_launch):
     $ roslaunch realsense2_camera rs_rgbd.launch
 Processing enabled by ROS driver:
@@ -39,12 +41,21 @@ Processing enabled by this node:
 
 <launch>
   <arg name="namespace"           default="camera"/>
+  <arg name="camera"              default="camera"/>
+  <arg name="tf_prefix"           default="$(arg camera)"/>
+  <arg name="external_manager"    default="false"/>
   <arg name="manager"             default="realsense2_camera_manager"/>
 
   <!-- Camera device specific arguments -->
 
   <arg name="serial_no"           default=""/>
-  <arg name="json_file_path"      default="$(find mvp_grasping)/cfg/realsense.json"/>
+  <arg name="usb_port_id"         default=""/>
+  <arg name="device_type"         default=""/>
+  <arg name="json_file_path"      default=""/>
+
+  <arg name="fisheye_width"       default="640"/>
+  <arg name="fisheye_height"      default="480"/>
+  <arg name="enable_fisheye"      default="true"/>
 
   <arg name="depth_width"         default="640"/>
   <arg name="depth_height"        default="480"/>
@@ -59,13 +70,19 @@ Processing enabled by this node:
   <arg name="color_height"        default="480"/>
   <arg name="enable_color"        default="true"/>
 
+  <arg name="fisheye_fps"         default="30"/>
   <arg name="depth_fps"           default="30"/>
   <arg name="infra_fps"           default="30"/>
   <arg name="color_fps"           default="30"/>
+  <arg name="gyro_fps"            default="400"/>
+  <arg name="accel_fps"           default="250"/>
+  <arg name="enable_gyro"         default="true"/>
+  <arg name="enable_accel"        default="true"/>
 
   <arg name="enable_pointcloud"   default="false"/>
   <arg name="enable_sync"         default="true"/>
   <arg name="align_depth"         default="true"/>
+  <arg name="filters"             default="disparity,spatial,temporal"/>
 
   <!-- rgbd_launch specific arguments -->
 
@@ -95,18 +112,25 @@ Processing enabled by this node:
   <arg name="sw_registered_processing"        default="true" unless="$(arg align_depth)" />
   <arg name="sw_registered_processing"        default="false" if="$(arg align_depth)" />
 
-  <group ns="$(arg namespace)">
+  <group ns="$(arg camera)">
 
     <!-- Launch the camera device nodelet-->
     <include file="$(find realsense2_camera)/launch/includes/nodelet.launch.xml">
-      <arg name="tf_prefix"                value="$(arg namespace)"/>
+      <arg name="external_manager"         value="$(arg external_manager)"/>
       <arg name="manager"                  value="$(arg manager)"/>
+      <arg name="tf_prefix"                value="$(arg tf_prefix)"/>
       <arg name="serial_no"                value="$(arg serial_no)"/>
+      <arg name="usb_port_id"              value="$(arg usb_port_id)"/>
+      <arg name="device_type"              value="$(arg device_type)"/>
       <arg name="json_file_path"           value="$(arg json_file_path)"/>
 
       <arg name="enable_pointcloud"        value="$(arg enable_pointcloud)"/>
       <arg name="enable_sync"              value="$(arg enable_sync)"/>
       <arg name="align_depth"              value="$(arg align_depth)"/>
+
+      <arg name="fisheye_width"            value="$(arg fisheye_width)"/>
+      <arg name="fisheye_height"           value="$(arg fisheye_height)"/>
+      <arg name="enable_fisheye"           value="$(arg enable_fisheye)"/>
 
       <arg name="depth_width"              value="$(arg depth_width)"/>
       <arg name="depth_height"             value="$(arg depth_height)"/>
@@ -121,9 +145,15 @@ Processing enabled by this node:
       <arg name="enable_infra1"            value="$(arg enable_infra1)"/>
       <arg name="enable_infra2"            value="$(arg enable_infra2)"/>
 
+      <arg name="fisheye_fps"              value="$(arg fisheye_fps)"/>
       <arg name="depth_fps"                value="$(arg depth_fps)"/>
       <arg name="infra_fps"                value="$(arg infra_fps)"/>
       <arg name="color_fps"                value="$(arg color_fps)"/>
+      <arg name="gyro_fps"                 value="$(arg gyro_fps)"/>
+      <arg name="accel_fps"                value="$(arg accel_fps)"/>
+      <arg name="enable_gyro"              value="$(arg enable_gyro)"/>
+      <arg name="enable_accel"             value="$(arg enable_accel)"/>
+      <arg name="filters"                  value="$(arg filters)"/>
     </include>
 
     <!-- RGB processing -->
@@ -165,12 +195,15 @@ Processing enabled by this node:
       </node>
     </group>
 
-    <!-- Workaround for the autoexposure not being enabled by default https://github.com/intel-ros/realsense/issues/318 -->
-    <node pkg="dougsm_helpers" type="set_realsense_autoexposure.sh" name="set_realsense_autoexposure" />
-
   </group>
 
   <node pkg="nodelet" type="nodelet" name="standalone_nodelet"  args="manager"/>
+
+  <!-- <node pkg="nodelet" type="nodelet" name="convert_depth_to_m"
+        args="load depth_image_proc/convert_metric standalone_nodelet">
+        <remap from="image_raw" to="$(arg namespace)/aligned_depth_to_color/image_raw"/>
+        <remap from="image" to="$(arg namespace)/depth/image_meters"/>
+  </node> -->
 
   <node pkg="nodelet" type="nodelet" name="convert_depth_to_m"
         args="load depth_image_proc/convert_metric standalone_nodelet">
@@ -178,9 +211,21 @@ Processing enabled by this node:
         <remap from="image" to="$(arg namespace)/depth/image_meters"/>
   </node>
 
+  <!-- <node pkg="nodelet" type="nodelet" name="convert_depth_to_m_2"
+        args="load depth_image_proc/convert_metric standalone_nodelet">
+        <remap from="image_raw" to="$(arg namespace)/aligned_depth_to_color/image_raw"/>
+        <remap from="image" to="$(arg namespace)/depth/image_meters_aligned"/>
+  </node> -->
+
   <node pkg="tf" type="static_transform_publisher" name="realsense_link_broadcaster"
         args="0.040 -0.0175 0.066 3.1415 -1.571 0 /panda_hand /camera_link 100" />
 
+  <node name="configure_temporal_filter" pkg="dynamic_reconfigure" type="dynparam"
+    args="set_from_parameters camera/temporal">
+      <param name="filter_smooth_delta" value="50" />
+      <param name="filter_smooth_alpha" value="0.1"/>
+      <param name="holes_fill"          value="3"  />
+    </node>
 
 
 </launch>
