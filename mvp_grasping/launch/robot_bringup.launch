@@ -1,21 +1,20 @@
-<?xml version="1.0" ?>
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE launch>
 <launch>
-
-  <arg name="robot_ip" default="172.16.0.2" />
+  <arg name="robot_ip"     default="172.16.0.2" />
+  <arg name="launch_rviz"  default="true" />
   <arg name="load_gripper" default="true" />
-
-  <include file="$(find franka_control)/launch/franka_control.launch">
-    <arg name="robot_ip" value="$(arg robot_ip)" />
+  
+  <include file="$(find panda_moveit_config)/launch/panda_control_moveit_rviz.launch">
+    <arg name="robot_ip"     value="$(arg robot_ip)"/>
+    <arg name="launch_rviz"  value="$(arg launch_rviz)"/>
+    <arg name="load_gripper" value="$(arg load_gripper)"/>
   </include>
 
   <!-- Set some project specific defaults for the panda arm. -->
   <node name="set_robot_defaults" pkg="franka_control_wrappers" type="set_panda_defaults.py" respawn="false" output="screen"/>
 
-  <include file="$(find panda_moveit_config)/launch/panda_moveit.launch" />
-  <include file="$(find panda_moveit_config)/launch/moveit_rviz.launch" />
-
   <include file="$(find franka_control_wrappers)/launch/cartesian_velocity_controller.launch">
     <arg name="stopped" value="true" />
   </include>
-
 </launch>
