@@ -9,7 +9,6 @@ import time
 import numpy as np
 import cv2
 
-import dougsm_helpers.tf_helpers as tfh
 from tf import transformations as tft
 from dougsm_helpers.timeit import TimeIt
 
@@ -47,20 +46,32 @@ class GGCNNService:
         self.last_image_pose = None
         rospy.Subscriber(rospy.get_param('~camera/depth_topic'), Image, self._depth_img_callback, queue_size=1)
 
+        self.waiting = False
+        self.received = False
+
     def _depth_img_callback(self, msg):
         # Doing a rospy.wait_for_message is super slow, compared to just subscribing and keeping the newest one.
+        if not self.waiting:
+          return
         self.curr_img_time = time.time()
         self.last_image_pose = tfh.current_robot_pose(self.base_frame, self.camera_frame)
         self.curr_depth_img = bridge.imgmsg_to_cv2(msg)
+        self.received = True
 
     def compute_service_handler(self, req):
-        if self.curr_depth_img is None:
-            rospy.logerr('No depth image received yet.')
-            rospy.sleep(0.5)
+        # if self.curr_depth_img is None:
+        #     rospy.logerr('No depth image received yet.')
+        #     rospy.sleep(0.5)
 
-        if time.time() - self.curr_img_time > 0.5:
-            rospy.logerr('The Realsense node has died')
-            return GraspPredictionResponse()
+        # if time.time() - self.curr_img_time > 0.5:
+        #     rospy.logerr('The Realsense node has died')
+        #     return GraspPredictionResponse()
+
+        self.waiting = True
+        while not self.received:
+          rospy.sleep(0.01)
+        self.waiting = False
+        self.received = False
 
         with TimeIt('Total'):
             depth = self.curr_depth_img.copy()
@@ -95,14 +106,14 @@ class GGCNNService:
             g.pose.position.x = pos[best_g, 0]
             g.pose.position.y = pos[best_g, 1]
             g.pose.position.z = pos[best_g, 2]
-            g.pose.orientation = tfh.list_to_quaternion(tft.quaternion_from_euler(np.pi, 0, angle[best_g_unr] - np.pi/2))
+            g.pose.orientation = tfh.list_to_quaternion(tft.quaternion_from_euler(np.pi, 0, ((angle[best_g_unr]%np.pi) - np.pi/2)))
             g.width = width_m[best_g_unr]
             g.quality = points[best_g_unr]
 
             show = gridshow('Display',
-                     [depth_crop, points, angle],
-                     [(0.30, 0.55), None, (-np.pi, np.pi)],
-                     [cv2.COLORMAP_BONE, cv2.COLORMAP_JET, cv2.COLORMAP_HSV],
+                     [depth_crop, points],
+                     [(0.30, 0.55), None, (-np.pi/2, np.pi/2)],
+                     [cv2.COLORMAP_BONE, cv2.COLORMAP_JET, cv2.COLORMAP_BONE],
                      3,
                      False)
 
@@ -113,5 +124,6 @@ class GGCNNService:
 
 if __name__ == '__main__':
     rospy.init_node('ggcnn_service')
+    import dougsm_helpers.tf_helpers as tfh
     GGCNN = GGCNNService()
     rospy.spin()
