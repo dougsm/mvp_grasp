@@ -12,7 +12,7 @@ grasp_entropy_node:
     cost:
         dist_from_best_scale: 0.15
         dist_from_best_gain: 0.2
-        dist_from_prev_view_scale: 0.0
+        dist_from_prev_view_scale: 1.0
         dist_from_prev_view_gain: 0.0
     height:
         z1: 0.55
