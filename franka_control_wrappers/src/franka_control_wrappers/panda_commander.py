@@ -23,6 +23,20 @@ class PandaCommander(object):
 
         self.reset_publisher = rospy.Publisher('/franka_control/error_recovery/goal', ErrorRecoveryActionGoal, queue_size=1)
 
+    def set_named_poses(self):
+        """
+        Fetch poses used in the application via their name from the parameter server and store them in the active move_group
+        """
+        #                                                                                                    1        2        3        4        5       6       7
+        grip_ready_joint_values_as_dict = rospy.get_param("/panda_setup/remember_joint_values/grip_ready", [-0.1706, -0.8882, -0.8514, -1.9803, -0.6403, 1.3514, 0.6152])
+        grip_ready_joint_values = [v for k, v in sorted(grip_ready_joint_values_as_dict.items())]
+        self.active_group.remember_joint_values('grip_ready', grip_ready_joint_values)
+
+        #                                                                                                1        2        3        4        5        6        7
+        drop_box_joint_values_as_dict = rospy.get_param("/panda_setup/remember_joint_values/drop_box", [ 0.8263,  1.0896,  0.8203, -0.8825, -0.7649,  1.7213,  2.2823])
+        drop_box_joint_values = [v for k, v in sorted(drop_box_joint_values_as_dict.items())]
+        self.active_group.remember_joint_values('drop_box', drop_box_joint_values)
+
     def print_debug_info(self):
         if self.active_group:
             planning_frame = self.active_group.get_planning_frame()
@@ -35,6 +49,9 @@ class PandaCommander(object):
         print("============ Printing robot state")
         print(self.robot.get_current_state())
         print("")
+
+    def get_current_pose(self):
+        return self.active_group.get_current_pose().pose
 
     def set_group(self, group_name):
         """

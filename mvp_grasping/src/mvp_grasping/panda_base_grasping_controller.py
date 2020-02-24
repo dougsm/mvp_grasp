@@ -172,6 +172,7 @@ class BaseGraspController(object):
                                    'velocity': 'cartesian_velocity_node_controller'})
         self.cs.switch_controller('moveit')
         self.pc = PandaCommander(group_name='panda_arm_hand')
+        self.pc.set_named_poses()
 
         self.robot_state = None
         self.ROBOT_ERROR_DETECTED = False
@@ -303,10 +304,10 @@ class BaseGraspController(object):
 
     def setup_velocity_control_loop(self):
         self.cs.switch_controller('moveit')
-        self.pc.goto_named_pose('ready', velocity=0.25)
-        start_pose = list(self.pregrasp_pose)
-        start_pose[0] += np.random.randn() * 0.05
-        start_pose[1] += np.random.randn() * 0.05
+        self.pc.goto_named_pose('grip_ready', velocity=0.25)
+        start_pose = self.pc.get_current_pose()
+        start_pose.position.x += np.random.randn() * 0.05
+        start_pose.position.y += np.random.randn() * 0.05
         self.pc.goto_pose(start_pose, velocity=0.25)
         self.pc.set_gripper(0.1)
         self.cs.switch_controller('velocity')
