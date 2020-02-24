@@ -12,6 +12,7 @@
   </include>
 
   <!-- Set some project specific defaults for the panda arm. -->
+  <rosparam command="load" file="$(find mvp_grasping)/cfg/panda_setup.yaml" ns="/panda_setup"/>
   <node name="set_robot_defaults" pkg="franka_control_wrappers" type="set_panda_defaults.py" respawn="false" output="screen"/>
 
   <include file="$(find franka_control_wrappers)/launch/cartesian_velocity_controller.launch">

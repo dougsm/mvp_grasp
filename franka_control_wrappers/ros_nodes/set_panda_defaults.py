@@ -25,9 +25,16 @@ else:
 rospy.wait_for_service('/franka_control/set_EE_frame')
 eef_srv = rospy.ServiceProxy('/franka_control/set_EE_frame', SetEEFrame)
 eef_msg = SetEEFrameRequest()
-# This is the default settings + 35mm down for the gripper
-gripper_offset = 0.035
-eef_msg.F_T_EE = [0.707099974155426, -0.707099974155426, 0.0, 0.0, 0.707099974155426, 0.707099974155426, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0,  gripper_offset + 0.10339999943971634, 1.0]
+
+# franka_msgs.msg.FrankaState keeps track of the updated F_T_EE, so the default transform has to be hardcoded
+default_F_T_EE = [0.7071, -0.7071, 0.0, 0.0, 0.7071, 0.7071, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.1034, 1.0]
+
+# Add the configured gripper height to the z-axis in the translation vector part of the transform
+gripper_offset = rospy.get_param("/panda_setup/camera_mount_extra_height", 0.035)
+
+current_F_T_EE = default_F_T_EE
+current_F_T_EE[14] += gripper_offset
+eef_msg.F_T_EE = current_F_T_EE
 
 res = eef_srv.call(eef_msg).success
 if not res:
