@@ -29,6 +29,10 @@ class Logger:
         dt = datetime.datetime.now().strftime('%m%d_%H%M%S')
         self.out_file = os.path.join(output_dir, '%s_%s.txt' % (dt, output_desc))
 
+        dirname = os.path.dirname(self.out_file)
+        if not os.path.exists(dirname):
+            os.makedirs(dirname)
+
     def write_line(self, l):
         with open(self.out_file, 'a') as f:
             f.write(l)
@@ -76,7 +80,7 @@ class Run:
         self.t0 = 0
         self.t1 = 0
         self.success = False
-        self.qualtiy = None
+        self.quality = None
         self.entropy = None
 
     def start(self):
@@ -139,7 +143,7 @@ class Experiment:
 
 class BaseGraspController(object):
     """
-    An base class for performing grasping experiments with the Panda robot.
+    A base class for performing grasping experiments with the Panda robot.
     """
     def __init__(self):
         entropy_node_name = '/grasp_entropy_node'
@@ -168,6 +172,7 @@ class BaseGraspController(object):
                                    'velocity': 'cartesian_velocity_node_controller'})
         self.cs.switch_controller('moveit')
         self.pc = PandaCommander(group_name='panda_arm_hand')
+        self.pc.set_named_poses()
 
         self.robot_state = None
         self.ROBOT_ERROR_DETECTED = False
@@ -241,7 +246,7 @@ class BaseGraspController(object):
 
         tfh.publish_pose_as_transform(self.best_grasp.pose, 'panda_link0', 'G', 0.05)
 
-    def __trigger_update(self):
+    def trigger_update(self):
         # Let ROS handle the threading for me.
         self.update_pub.publish(Empty())
 
@@ -253,11 +258,11 @@ class BaseGraspController(object):
 
             # Offset for initial pose.
             initial_offset = 0.05
-            LINK_EE_OFFSET = 0.138
+            LINK_EE_OFFSET = self.robot_state.F_T_EE[14]
 
             # Add some limits, plus a starting offset.
             self.best_grasp.pose.position.z = max(self.best_grasp.pose.position.z - 0.01, 0.026)  # 0.021 = collision with ground
-            self.best_grasp.pose.position.z += initial_offset + LINK_EE_OFFSET  # Offset from end efector position to
+            self.best_grasp.pose.position.z += initial_offset + LINK_EE_OFFSET  # Offset from end effector position to
 
             self.pc.set_gripper(self.best_grasp.width, wait=False)
             rospy.sleep(0.1)
@@ -296,30 +301,69 @@ class BaseGraspController(object):
         self.curr_velo = Twist()
         self.curr_velo_pub.publish(self.curr_velo)
 
+
+    def setup_velocity_control_loop(self):
+        self.cs.switch_controller('moveit')
+        self.pc.goto_named_pose('grip_ready', velocity=0.25)
+        start_pose = self.pc.get_current_pose()
+        start_pose.position.x += np.random.randn() * 0.05
+        start_pose.position.y += np.random.randn() * 0.05
+        self.pc.goto_pose(start_pose, velocity=0.25)
+        self.pc.set_gripper(0.1)
+        self.cs.switch_controller('velocity')
+        self.entropy_reset_srv.call()
+    
+    def execute_velocity_control_loop(self):
+        """Perform the velocity control portion."""
+        self._in_velo_loop = True
+        velo_ok = self.__velo_control_loop()
+        self._in_velo_loop = False
+        return velo_ok
+
+
+    def execute_best_grasp(self):
+        """Execute the Grasp"""
+        grasp_ret = self.__execute_best_grasp()
+        return grasp_ret
+
+
+    def release_object(self):
+        """Release Object"""
+        self.cs.switch_controller('moveit')
+        self.pc.goto_named_pose('grip_ready', velocity=0.5)
+        self.pc.goto_named_pose('drop_box', velocity=0.5)
+        self.pc.set_gripper(0.1)
+
+
+    def check_success_using_scales(self, run):
+        """Check success using the scales"""
+        rospy.sleep(1.0)
+        grasp_success = self.__weight_increase_check()
+        if not grasp_success:
+            rospy.logerr("Failed Grasp")
+            m = AddFailurePointRequest()
+            m.point.x = self.best_grasp.pose.position.x
+            m.point.y = self.best_grasp.pose.position.y
+            self.add_failure_point_srv.call(m)
+        else:
+            rospy.logerr("Successful Grasp")
+        run.success = grasp_success
+        run.quality = self.best_grasp.quality
+        run.entropy = self.best_grasp.entropy
+        run.viewpoints = self.viewpoints
+        run.save()
+
     def go(self):
         raw_input('Press Enter to Start.')
         while not rospy.is_shutdown():
-            self.cs.switch_controller('moveit')
-            self.pc.goto_named_pose('grip_ready', velocity=0.25)
-            start_pose = list(self.pregrasp_pose)
-            start_pose[0] += np.random.randn() * 0.05
-            start_pose[1] += np.random.randn() * 0.05
-            self.pc.goto_pose(start_pose, velocity=0.25)
-            self.pc.set_gripper(0.1)
-
-            self.cs.switch_controller('velocity')
-
-            self.entropy_reset_srv.call()
-            self.__trigger_update()
-
+            self.setup_velocity_control_loop()
+            
+            self.trigger_update()
+            
             run = self.experiment.new_run()
             run.start()
-
-            # Perform the velocity control portion.
-            self._in_velo_loop = True
-            velo_ok = self.__velo_control_loop()
-            self._in_velo_loop = False
-            if not velo_ok:
+            
+            if not self.execute_velocity_control_loop():
                 rospy.sleep(1.0)
                 if self.BAD_UPDATE:
                     raw_input('Fix Me! Enter to Continue')
@@ -329,8 +373,7 @@ class BaseGraspController(object):
                 rospy.logerr('Aborting this Run.')
                 continue
 
-            # Execute the Grasp
-            grasp_ret = self.__execute_best_grasp()
+            grasp_ret = self.execute_best_grasp()
             run.stop()
 
             if not grasp_ret or self.ROBOT_ERROR_DETECTED:
@@ -339,27 +382,6 @@ class BaseGraspController(object):
                     self.__recover_robot_from_error()
                 continue
 
-            # Release Object
-            self.cs.switch_controller('moveit')
-            self.pc.goto_named_pose('grip_ready', velocity=0.5)
-            self.pc.goto_named_pose('drop_box', velocity=0.5)
-            self.pc.set_gripper(0.1)
+            self.release_object()
 
-            # Check success using the scales.
-            rospy.sleep(1.0)
-            grasp_success = self.__weight_increase_check()
-            if not grasp_success:
-                rospy.logerr("Failed Grasp")
-                m = AddFailurePointRequest()
-                m.point.x = self.best_grasp.pose.position.x
-                m.point.y = self.best_grasp.pose.position.y
-                self.add_failure_point_srv.call(m)
-            else:
-                rospy.logerr("Successful Grasp")
-
-            run.success = grasp_success
-            run.quality = self.best_grasp.quality
-            run.entropy = self.best_grasp.entropy
-            run.viewpoints = self.viewpoints
-            run.save()
-
+            self.check_success_using_scales(run)

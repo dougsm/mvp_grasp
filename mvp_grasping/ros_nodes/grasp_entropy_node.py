@@ -95,7 +95,7 @@ class ViewpointEntropyCalculator:
         """
         Update the GridWorld with a new observation, compute the viewpoint entropy and generate a new command.
         :param req: Ignored
-        :return: NextViewpointResponse (success flag, best grsap, velocity command)
+        :return: NextViewpointResponse (success flag, best grasp, velocity command)
         """
 
         # Some initial checks

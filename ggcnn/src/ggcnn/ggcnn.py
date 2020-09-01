@@ -6,14 +6,14 @@ import scipy.ndimage as ndimage
 
 import tensorflow as tf
 from tensorflow.keras.models import load_model
-from tensorflow.keras.backend import set_session
+from tensorflow.compat.v1.keras.backend import set_session
 
 from dougsm_helpers.timeit import TimeIt
 
 MODEL_FILE = 'models/epoch_29_model.hdf5'
-sess = tf.Session()
+sess = tf.compat.v1.Session()
 set_session(sess)
-graph = tf.get_default_graph()
+graph = tf.compat.v1.get_default_graph()
 model = load_model(path.join(path.dirname(__file__), MODEL_FILE))
 
 
