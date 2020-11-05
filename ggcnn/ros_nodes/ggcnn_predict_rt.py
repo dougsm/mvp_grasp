@@ -45,6 +45,12 @@ cy = K[5]
 
 
 def depth_callback(depth_message):
+    """
+    Predict depth depth.
+
+    Args:
+        depth_message: (str): write your description
+    """
     global prev_mp
     global fx, cx, fy, cy
 

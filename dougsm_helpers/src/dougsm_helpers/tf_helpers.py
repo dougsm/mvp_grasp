@@ -12,6 +12,11 @@ listener = None
 
 
 def _init_tf():
+    """
+    Initialize the tf. tf. tf. buffers.
+
+    Args:
+    """
     # Create buffer and listener
     # Something has changed in tf that means this must happen after init_node
     global tfBuffer, listener
@@ -20,10 +25,22 @@ def _init_tf():
 
 
 def quaternion_to_list(quaternion):
+    """
+    Convert quaternion to quaternion.
+
+    Args:
+        quaternion: (todo): write your description
+    """
     return [quaternion.x, quaternion.y, quaternion.z, quaternion.w]
 
 
 def list_to_quaternion(l):
+    """
+    Convert a quaternion to quaternion.
+
+    Args:
+        l: (todo): write your description
+    """
     q = gmsg.Quaternion()
     q.x = l[0]
     q.y = l[1]
@@ -139,6 +156,16 @@ def publish_pose_as_transform(pose, reference_frame, name, seconds=1):
 
 
 def publish_tf_quaterion_as_transform(translation, quaternion, reference_frame, name, seconds=1):
+    """
+    Publish a quaternion.
+
+    Args:
+        translation: (todo): write your description
+        quaternion: (todo): write your description
+        reference_frame: (todo): write your description
+        name: (str): write your description
+        seconds: (todo): write your description
+    """
     qm = gmsg.Transform()
     qm.translation.x = translation[0]
     qm.translation.y = translation[1]

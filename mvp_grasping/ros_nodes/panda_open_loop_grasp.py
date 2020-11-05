@@ -32,6 +32,12 @@ class PandaOpenLoopGraspController(object):
     Perform open-loop grasps from a single viewpoint using the Panda robot.
     """
     def __init__(self):
+        """
+        Initialize the service.
+
+        Args:
+            self: (todo): write your description
+        """
         ggcnn_service_name = '/ggcnn_service'
         rospy.wait_for_service(ggcnn_service_name + '/predict')
         self.ggcnn_srv = rospy.ServiceProxy(ggcnn_service_name + '/predict', GraspPrediction)
@@ -64,12 +70,24 @@ class PandaOpenLoopGraspController(object):
         self.experiment = Experiment()
 
     def __recover_robot_from_error(self):
+        """
+        Determine the robot error from the rospy
+
+        Args:
+            self: (todo): write your description
+        """
         rospy.logerr('Recovering')
         self.pc.recover()
         rospy.logerr('Done')
         self.ROBOT_ERROR_DETECTED = False
 
     def __weight_increase_check(self):
+        """
+        Increase weight weight of the weight.
+
+        Args:
+            self: (todo): write your description
+        """
         try:
             w = rospy.wait_for_message('/scales/weight', Int16, timeout=2).data
             increased = w > self.last_weight
@@ -79,6 +97,13 @@ class PandaOpenLoopGraspController(object):
             return raw_input('No weight. Success? [1/0]') == '1'
 
     def __robot_state_callback(self, msg):
+        """
+        Robot the roles of the roles
+
+        Args:
+            self: (todo): write your description
+            msg: (str): write your description
+        """
         self.robot_state = msg
         if any(self.robot_state.cartesian_collision):
             if not self.ROBOT_ERROR_DETECTED:
@@ -92,6 +117,12 @@ class PandaOpenLoopGraspController(object):
                 self.ROBOT_ERROR_DETECTED = True
 
     def __execute_best_grasp(self):
+        """
+        Execute the best best hanging.
+
+        Args:
+            self: (todo): write your description
+        """
             self.cs.switch_controller('moveit')
 
             ret = self.ggcnn_srv.call()
@@ -146,11 +177,23 @@ class PandaOpenLoopGraspController(object):
             return True
 
     def stop(self):
+        """
+        Stops the sensor.
+
+        Args:
+            self: (todo): write your description
+        """
         self.pc.stop()
         self.curr_velo = Twist()
         self.curr_velo_pub.publish(self.curr_velo)
 
     def go(self):
+        """
+        Go through the controller.
+
+        Args:
+            self: (todo): write your description
+        """
         raw_input('Press Enter to Start.')
         while not rospy.is_shutdown():
             self.cs.switch_controller('moveit')

@@ -14,6 +14,13 @@ class PandaCommander(object):
     and some via the panda API
     """
     def __init__(self, group_name=None):
+        """
+        Initialize the group.
+
+        Args:
+            self: (todo): write your description
+            group_name: (str): write your description
+        """
         self.robot = moveit_commander.RobotCommander()
         self.scene = moveit_commander.PlanningSceneInterface()
 
@@ -24,6 +31,12 @@ class PandaCommander(object):
         self.reset_publisher = rospy.Publisher('/franka_control/error_recovery/goal', ErrorRecoveryActionGoal, queue_size=1)
 
     def print_debug_info(self):
+        """
+        Print debug information
+
+        Args:
+            self: (todo): write your description
+        """
         if self.active_group:
             planning_frame = self.active_group.get_planning_frame()
             print("============ Reference frame: %s" % planning_frame)

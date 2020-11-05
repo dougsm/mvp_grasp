@@ -8,6 +8,18 @@ np.set_printoptions(precision=3, suppress=True)
 
 class Renderer:
     def __init__(self, im_width, im_height, fov, near_plane, far_plane, DEBUG=False):
+        """
+        Initialize the camera.
+
+        Args:
+            self: (todo): write your description
+            im_width: (int): write your description
+            im_height: (int): write your description
+            fov: (todo): write your description
+            near_plane: (int): write your description
+            far_plane: (todo): write your description
+            DEBUG: (bool): write your description
+        """
         self.im_width = im_width
         self.im_height = im_height
         self.fov = fov
@@ -35,19 +47,51 @@ class Renderer:
         self._rendered_rot = None
 
     def load_urdf(self, urdf):
+        """
+        Loads a protobuf.
+
+        Args:
+            self: (todo): write your description
+            urdf: (str): write your description
+        """
         return pb.loadURDF(urdf)
 
     def remove_object(self, o_id, update=True):
+        """
+        Removes an object from the object.
+
+        Args:
+            self: (todo): write your description
+            o_id: (str): write your description
+            update: (todo): write your description
+        """
         pb.removeBody(o_id)
         if update:
             self.objects.remove(o_id)
 
     def remove_all_objects(self):
+        """
+        Removes all objects from this object.
+
+        Args:
+            self: (todo): write your description
+        """
         for o_id in self.objects:
             self.remove_object(o_id, False)
         self.objects = []
 
     def load_mesh(self, mesh, scale=None, position=None, orientation=None, mass=1):
+        """
+        Load a mesh.
+
+        Args:
+            self: (str): write your description
+            mesh: (str): write your description
+            scale: (str): write your description
+            position: (str): write your description
+            orientation: (str): write your description
+            mass: (todo): write your description
+        """
         if scale is None:
             scale = [1, 1, 1]
         if position is None:
@@ -63,11 +107,24 @@ class Renderer:
         return o_id
 
     def step(self, n=1):
+        """
+        Execute a single step.
+
+        Args:
+            self: (todo): write your description
+            n: (array): write your description
+        """
         for i in range(n):
             pb.stepSimulation()
 
     @property
     def camera_intrinsic(self):
+        """
+        Return the camera camera camera height.
+
+        Args:
+            self: (todo): write your description
+        """
         # Thanks http://kgeorge.github.io/2014/03/08/calculating-opengl-perspective-matrix-from-opencv-intrinsic-matrix
         return np.array([
             [self.pm[0]*self.im_width/2, 0, self.im_width/2],
@@ -76,6 +133,13 @@ class Renderer:
         ])
 
     def _rotation_matrix(self, rpy):
+        """
+        Return rotation matrix around rotation matrix rpy.
+
+        Args:
+            self: (todo): write your description
+            rpy: (float): write your description
+        """
         r, p, y = rpy
 
         Rx = np.array([
@@ -99,6 +163,12 @@ class Renderer:
         return np.linalg.multi_dot([Rz, Ry, Rx])
 
     def draw_camera_pos(self):
+        """
+        Draw camera position
+
+        Args:
+            self: (todo): write your description
+        """
         pb.removeAllUserDebugItems()
         start = self.camera_pos
         end_x = start + np.dot(self.camera_rot, np.array([0.1, 0, 0, 1.0]))[0:3]
@@ -109,6 +179,12 @@ class Renderer:
         pb.addUserDebugLine(start, end_z, [0, 0, 1], 5)
 
     def render(self):
+        """
+        Render the camera to the camera object.
+
+        Args:
+            self: (todo): write your description
+        """
         if np.all(self._rendered_pos == self.camera_pos) and np.all(self._rendered_rot == self.camera_rot):
             return self._rendered
 
@@ -129,14 +205,36 @@ class Renderer:
         return i_arr
 
     def get_depth(self):
+        """
+        Get the depth.
+
+        Args:
+            self: (todo): write your description
+        """
         return self.render()[3]
 
     def get_depth_metres(self, noise=0.001):
+        """
+        Return a set of the metric metric.
+
+        Args:
+            self: (todo): write your description
+            noise: (todo): write your description
+        """
         d = self.render()[3]
         # Linearise to metres
         return 2*self.far_plane*self.near_plane/(self.far_plane + self.near_plane - (self.far_plane - self.near_plane)*(2*d - 1)) + np.random.randn(self.im_height, self.im_width) * noise
 
     def px_to_xyz_metres(self, x_px, y_px, z=None):
+        """
+        Convert x_px to an array
+
+        Args:
+            self: (todo): write your description
+            x_px: (todo): write your description
+            y_px: (array): write your description
+            z: (todo): write your description
+        """
         K = self.camera_intrinsic
         if z is None:
             z = self.get_depth_metres()[y_px, x_px]
@@ -147,6 +245,12 @@ class Renderer:
         return np.dot(self.camera_rot[0:3, 0:3], np.stack((x, y, z))) + self.camera_pos.reshape((3, 1))
 
     def get_xyz_metres(self):
+        """
+        Get x y x y z - axis
+
+        Args:
+            self: (todo): write your description
+        """
         K = self.camera_intrinsic
         z = self.get_depth_metres()
         # Pixel to physical coords in camera frame
@@ -156,16 +260,42 @@ class Renderer:
         return np.dot(self.camera_rot[0:3, 0:3], np.stack((x, y, z.flatten()))) + self.camera_pos.reshape((3, 1))
 
     def get_rgb(self):
+        """
+        Get the rgb rgb color.
+
+        Args:
+            self: (todo): write your description
+        """
         return self.render()[2]
 
     def z_rotation(self):
+        """
+        Return the rotation matrix.
+
+        Args:
+            self: (todo): write your description
+        """
         a = np.arctan2(self.camera_rot[1, 0], self.camera_rot[0, 0])
         return a
 
     def move_to(self, T):
+        """
+        Move camera to the camera.
+
+        Args:
+            self: (todo): write your description
+            T: (todo): write your description
+        """
         self.camera_pos = np.array(T)
 
     def look_at(self, p):
+        """
+        Look up camera at given position.
+
+        Args:
+            self: (todo): write your description
+            p: (todo): write your description
+        """
         p = np.array(p)
         if np.all(p == self.camera_pos):
             return
@@ -183,24 +313,59 @@ class Renderer:
         self.draw_camera_pos()
 
     def move_world(self, T):
+        """
+        Move camera to the camera.
+
+        Args:
+            self: (todo): write your description
+            T: (todo): write your description
+        """
         self.camera_pos += np.array(T)
         self.draw_camera_pos()
 
     def move_local(self, T):
+        """
+        Move camera to the camera.
+
+        Args:
+            self: (todo): write your description
+            T: (todo): write your description
+        """
         T = np.dot(self.camera_rot[0:3, 0:3], np.array(T))
         self.camera_pos += T
         self.draw_camera_pos()
 
     def rotate_world(self, rpy):
+        """
+        Rotate the camera around the camera.
+
+        Args:
+            self: (todo): write your description
+            rpy: (todo): write your description
+        """
         self.camera_rot = np.dot(self._rotation_matrix(rpy), self.camera_rot)
         self.draw_camera_pos()
 
     def rotate_local(self, rpy):
+        """
+        Rotate the camera.
+
+        Args:
+            self: (todo): write your description
+            rpy: (bool): write your description
+        """
         rpy = np.dot(self.camera_rot[0:3, 0:3], np.array(rpy))
         self.camera_rot = np.dot(self._rotation_matrix(rpy), self.camera_rot)
         self.draw_camera_pos()
 
     def move_camera_key(self, k):
+        """
+        Moves camera key.
+
+        Args:
+            self: (todo): write your description
+            k: (todo): write your description
+        """
         pos_step = 0.01
         ang_step = np.pi * 5/180
         if k == ord('q'):

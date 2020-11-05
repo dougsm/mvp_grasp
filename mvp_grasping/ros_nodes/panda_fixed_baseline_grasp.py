@@ -17,6 +17,12 @@ class FixedBaselineGraspController(BaseGraspController):
     All of the common functionality is implemented in BaseGraspController
     """
     def __init__(self):
+        """
+        Initialize the minimisation.
+
+        Args:
+            self: (todo): write your description
+        """
         super(FixedBaselineGraspController, self).__init__()
         self.update_rate = 10.0 * 50 / 65  # Hz  (perform 50 updates during the trajectory)
 

@@ -18,6 +18,16 @@ device = torch.device("cuda:0")
 
 
 def process_depth_image(depth, crop_size, out_size=300, return_mask=False, crop_y_offset=0):
+    """
+    Process a depth image.
+
+    Args:
+        depth: (int): write your description
+        crop_size: (int): write your description
+        out_size: (int): write your description
+        return_mask: (bool): write your description
+        crop_y_offset: (str): write your description
+    """
     imh, imw = depth.shape
 
     with TimeIt('1'):
@@ -61,6 +71,18 @@ def process_depth_image(depth, crop_size, out_size=300, return_mask=False, crop_
 
 
 def predict(depth, process_depth=True, crop_size=300, out_size=300, depth_nan_mask=None, crop_y_offset=0, filters=(2.0, 1.0, 1.0)):
+    """
+    Predict a prediction.
+
+    Args:
+        depth: (array): write your description
+        process_depth: (array): write your description
+        crop_size: (int): write your description
+        out_size: (int): write your description
+        depth_nan_mask: (array): write your description
+        crop_y_offset: (array): write your description
+        filters: (callable): write your description
+    """
     if process_depth:
         depth, depth_nan_mask = process_depth_image(depth, crop_size, out_size=out_size, return_mask=True, crop_y_offset=crop_y_offset)
 

@@ -34,6 +34,12 @@ class ViewpointEntropyCalculator:
     This class implements the Grid World portion of the Multi-View controller.
     """
     def __init__(self):
+        """
+        Initialize the histogram
+
+        Args:
+            self: (todo): write your description
+        """
         self.hist_bins_q = rospy.get_param('~histogram/bins/quality')
         self.hist_bins_a = rospy.get_param('~histogram/bins/angle')
 

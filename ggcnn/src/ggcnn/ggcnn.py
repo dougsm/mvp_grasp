@@ -21,6 +21,16 @@ TimeIt.print_output = False  # For debugging/timing
 
 
 def process_depth_image(depth, crop_size, out_size=300, return_mask=False, crop_y_offset=0):
+    """
+    Process a depth image.
+
+    Args:
+        depth: (int): write your description
+        crop_size: (int): write your description
+        out_size: (int): write your description
+        return_mask: (bool): write your description
+        crop_y_offset: (str): write your description
+    """
     imh, imw = depth.shape
 
     with TimeIt('Process Depth Image'):
@@ -65,6 +75,18 @@ def process_depth_image(depth, crop_size, out_size=300, return_mask=False, crop_
 
 
 def predict(depth, process_depth=True, crop_size=300, out_size=300, depth_nan_mask=None, filters=(2.0, 1.0, 1.0), crop_y_offset=0):
+    """
+    Predict a set of a depth.
+
+    Args:
+        depth: (array): write your description
+        process_depth: (array): write your description
+        crop_size: (int): write your description
+        out_size: (int): write your description
+        depth_nan_mask: (array): write your description
+        filters: (callable): write your description
+        crop_y_offset: (array): write your description
+    """
     global graph, sess
     if process_depth:
         depth, depth_nan_mask = process_depth_image(depth, crop_size, out_size, True, crop_y_offset=crop_y_offset)
