@@ -2,6 +2,16 @@ import numpy as np
 
 
 def update_batch(data, ids, count, mean, var):
+    """
+    Update the batch of - batch.
+
+    Args:
+        data: (dict): write your description
+        ids: (list): write your description
+        count: (int): write your description
+        mean: (todo): write your description
+        var: (todo): write your description
+    """
     ids_r = ids[:, 0] * count.shape[1] + ids[:, 1]
     ids_r_u, ids_r_u_i = np.unique(ids_r, return_inverse=True)  # TODO: This is by far the slowest part of this function.
     ids_r_u = (ids_r_u, )
@@ -34,6 +44,16 @@ def update_batch(data, ids, count, mean, var):
 
 
 def update_batch_single_sample(data, ids, count, mean, var):
+    """
+    Update a single sample
+
+    Args:
+        data: (todo): write your description
+        ids: (list): write your description
+        count: (int): write your description
+        mean: (todo): write your description
+        var: (todo): write your description
+    """
     ids_r = ids[:, 0] * count.shape[1] + ids[:, 1]
     ids_r_u, ids_r_u_i = np.unique(ids_r, return_inverse=True)  # TODO: This is by far the slowest part of this function.
     ids_r_u = (ids_r_u, )
@@ -61,6 +81,14 @@ def update_batch_single_sample(data, ids, count, mean, var):
 
 
 def update_histogram(data, ids, histogram):
+    """
+    Updates the histogram data.
+
+    Args:
+        data: (array): write your description
+        ids: (list): write your description
+        histogram: (todo): write your description
+    """
     ids_r = ids[:, 0] * histogram.shape[1] + ids[:, 1] + np.floor(data * 10.0).astype(np.int) * histogram.shape[0] * histogram.shape[1]
     ids_r_u = np.unique(ids_r)
     ids_unr = ((ids_r_u[0]//histogram.shape[1])%histogram.shape[0], ids_r_u[0]%histogram.shape[1], ids_r_u[0]//histogram.shape[0]//histogram.shape[1])
@@ -70,6 +98,15 @@ def update_histogram(data, ids, histogram):
 
 
 def update_histogram_angle(data, angle, ids, histogram):
+    """
+    Updates the histogram. histogram.
+
+    Args:
+        data: (todo): write your description
+        angle: (todo): write your description
+        ids: (list): write your description
+        histogram: (todo): write your description
+    """
     ids_r = np.ravel_multi_index(
         (
             ids[:, 0],
@@ -87,6 +124,16 @@ def update_histogram_angle(data, angle, ids, histogram):
 
 
 def update_sequential(data, ids, count, mean, m2):
+    """
+    Updates the sequences.
+
+    Args:
+        data: (todo): write your description
+        ids: (list): write your description
+        count: (int): write your description
+        mean: (todo): write your description
+        m2: (todo): write your description
+    """
 
     if ids.ndim == 2:
         ids = tuple(ids)

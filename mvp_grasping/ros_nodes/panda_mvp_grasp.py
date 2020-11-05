@@ -14,6 +14,12 @@ class MVPGraspController(BaseGraspController):
     All of the common functionality is implemented in BaseGraspController
     """
     def __init__(self):
+        """
+        Initialize the device
+
+        Args:
+            self: (todo): write your description
+        """
         super(MVPGraspController, self).__init__()
         self.update_rate = 10.0  # Hz
 

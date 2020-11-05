@@ -26,6 +26,12 @@ TimeIt.print_output = False
 
 class GGCNNService:
     def __init__(self):
+        """
+        Initialize the camera.
+
+        Args:
+            self: (todo): write your description
+        """
         # Get the camera parameters
         cam_info_topic = rospy.get_param('~camera/info_topic')
         camera_info_msg = rospy.wait_for_message(cam_info_topic, CameraInfo)
@@ -50,6 +56,13 @@ class GGCNNService:
         self.received = False
 
     def _depth_img_callback(self, msg):
+        """
+        Callback for depth depth image
+
+        Args:
+            self: (todo): write your description
+            msg: (str): write your description
+        """
         # Doing a rospy.wait_for_message is super slow, compared to just subscribing and keeping the newest one.
         if not self.waiting:
           return
@@ -59,6 +72,13 @@ class GGCNNService:
         self.received = True
 
     def compute_service_handler(self, req):
+        """
+        Computes the service handler.
+
+        Args:
+            self: (todo): write your description
+            req: (todo): write your description
+        """
         # if self.curr_depth_img is None:
         #     rospy.logerr('No depth image received yet.')
         #     rospy.sleep(0.5)

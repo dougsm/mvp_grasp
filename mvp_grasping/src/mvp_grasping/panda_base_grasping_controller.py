@@ -26,15 +26,37 @@ from mvp_grasping.srv import NextViewpoint, AddFailurePoint, AddFailurePointRequ
 
 class Logger:
     def __init__(self, output_desc='run', output_dir='~'):
+        """
+        Initialize the data directory.
+
+        Args:
+            self: (todo): write your description
+            output_desc: (str): write your description
+            output_dir: (str): write your description
+        """
         dt = datetime.datetime.now().strftime('%m%d_%H%M%S')
         self.out_file = os.path.join(output_dir, '%s_%s.txt' % (dt, output_desc))
 
     def write_line(self, l):
+        """
+        Write a line to the file.
+
+        Args:
+            self: (todo): write your description
+            l: (todo): write your description
+        """
         with open(self.out_file, 'a') as f:
             f.write(l)
             f.write('\n')
 
     def log_list(self, l):
+        """
+        Writes a list of strings
+
+        Args:
+            self: (todo): write your description
+            l: (array): write your description
+        """
         o = []
         for i in l:
             if isinstance(i, float):
@@ -44,6 +66,13 @@ class Logger:
         self.write_line('\t'.join([str(i) for i in o]))
 
     def log_params(self, params):
+        """
+        Logs parameters * params *
+
+        Args:
+            self: (todo): write your description
+            params: (list): write your description
+        """
         for p in params:
             self.log_list([
                 p,
@@ -51,6 +80,14 @@ class Logger:
             ])
 
     def log_dict(self, d, s=[]):
+        """
+        Recursively update dict.
+
+        Args:
+            self: (todo): write your description
+            d: (array): write your description
+            s: (array): write your description
+        """
         if isinstance(d, dict):
             for k in d:
                 self.log_dict(d[k], s + [k])
@@ -71,6 +108,13 @@ class Run:
     ]
 
     def __init__(self, experiment):
+        """
+        Initialize the simulation.
+
+        Args:
+            self: (todo): write your description
+            experiment: (todo): write your description
+        """
         self.experiment = experiment
         self.viewpoints = None
         self.t0 = 0
@@ -80,20 +124,50 @@ class Run:
         self.entropy = None
 
     def start(self):
+        """
+        Start the timer.
+
+        Args:
+            self: (todo): write your description
+        """
         self.t0 = time.time()
 
     def stop(self):
+        """
+        Stop the timer.
+
+        Args:
+            self: (todo): write your description
+        """
         self.t1 = time.time()
 
     @property
     def time(self):
+        """
+        Returns the current time.
+
+        Args:
+            self: (todo): write your description
+        """
         return self.t1 - self.t0
 
     @property
     def log_list(self):
+        """
+        Return a list of log_list objects.
+
+        Args:
+            self: (todo): write your description
+        """
         return [getattr(self, p) for p in Run.log_properties]
 
     def save(self):
+        """
+        Save the current run.
+
+        Args:
+            self: (todo): write your description
+        """
         self.experiment.save_run(self)
 
 
@@ -104,6 +178,12 @@ class Experiment:
     ]
 
     def __init__(self):
+        """
+        Initialize the properties object.
+
+        Args:
+            self: (todo): write your description
+        """
         self.runs = []
         exp_name = raw_input('Name of this experiment? ')
         self.logger = Logger(exp_name)
@@ -112,9 +192,22 @@ class Experiment:
         self.successes = 0
 
     def new_run(self):
+        """
+        Create a new run.
+
+        Args:
+            self: (todo): write your description
+        """
         return Run(self)
 
     def save_run(self, run):
+        """
+        Save a new run.
+
+        Args:
+            self: (todo): write your description
+            run: (todo): write your description
+        """
         if run.success:
             self.successes += 1
         self.runs.append(run)
@@ -122,17 +215,42 @@ class Experiment:
 
     @property
     def success_rate(self):
+        """
+        Return the success rate.
+
+        Args:
+            self: (todo): write your description
+        """
         return self.successes/len(self.runs)
 
     @property
     def mpph(self):
+        """
+        Calculate rate.
+
+        Args:
+            self: (todo): write your description
+        """
         return (3600 / (sum([r.time for r in self.runs]) / len(self.runs))) * self.success_rate
 
     @property
     def log_list(self):
+        """
+        Returns a list of log_list objects.
+
+        Args:
+            self: (todo): write your description
+        """
         return [getattr(self, p) for p in Experiment.log_properties]
 
     def log_run(self, run):
+        """
+        Log a list of runs.
+
+        Args:
+            self: (todo): write your description
+            run: (todo): write your description
+        """
         self.logger.log_list(run.log_list + self.log_list)
         print(self.success_rate, self.mpph)
 
@@ -142,6 +260,12 @@ class BaseGraspController(object):
     An base class for performing grasping experiments with the Panda robot.
     """
     def __init__(self):
+        """
+        Initialize the reader.
+
+        Args:
+            self: (todo): write your description
+        """
         entropy_node_name = '/grasp_entropy_node'
         rospy.wait_for_service(entropy_node_name + '/update_grid')
         self.entropy_srv = rospy.ServiceProxy(entropy_node_name + '/update_grid', NextViewpoint)
@@ -186,12 +310,24 @@ class BaseGraspController(object):
         self.experiment = Experiment()
 
     def __recover_robot_from_error(self):
+        """
+        Determine the robot error from the rospy
+
+        Args:
+            self: (todo): write your description
+        """
         rospy.logerr('Recovering')
         self.pc.recover()
         rospy.logerr('Done')
         self.ROBOT_ERROR_DETECTED = False
 
     def __weight_increase_check(self):
+        """
+        Increase weight weight of the weight.
+
+        Args:
+            self: (todo): write your description
+        """
         try:
             w = rospy.wait_for_message('/scales/weight', Int16, timeout=2).data
             increased = w > self.last_weight
@@ -201,6 +337,13 @@ class BaseGraspController(object):
             return raw_input('No weight. Success? [1/0]') == '1'
 
     def __robot_state_callback(self, msg):
+        """
+        Robot the roles of the roles
+
+        Args:
+            self: (todo): write your description
+            msg: (str): write your description
+        """
         self.robot_state = msg
         if any(self.robot_state.cartesian_collision):
             if not self.ROBOT_ERROR_DETECTED:
@@ -214,6 +357,13 @@ class BaseGraspController(object):
                 self.ROBOT_ERROR_DETECTED = True
 
     def __update_callback(self, msg):
+        """
+        Call the callback.
+
+        Args:
+            self: (todo): write your description
+            msg: (str): write your description
+        """
         # Update the MVP Controller asynchronously
         if not self._in_velo_loop:
             # Stop the callback lagging behind
@@ -242,13 +392,31 @@ class BaseGraspController(object):
         tfh.publish_pose_as_transform(self.best_grasp.pose, 'panda_link0', 'G', 0.05)
 
     def __trigger_update(self):
+        """
+        Trigger the update of an update.
+
+        Args:
+            self: (todo): write your description
+        """
         # Let ROS handle the threading for me.
         self.update_pub.publish(Empty())
 
     def __velo_control_loop(self):
+        """
+        Set the loop
+
+        Args:
+            self: (todo): write your description
+        """
         raise NotImplementedError()
 
     def __execute_best_grasp(self):
+        """
+        Executes the best best best best solution.
+
+        Args:
+            self: (todo): write your description
+        """
             self.cs.switch_controller('moveit')
 
             # Offset for initial pose.
@@ -292,11 +460,23 @@ class BaseGraspController(object):
             return True
 
     def stop(self):
+        """
+        Stops the sensor.
+
+        Args:
+            self: (todo): write your description
+        """
         self.pc.stop()
         self.curr_velo = Twist()
         self.curr_velo_pub.publish(self.curr_velo)
 
     def go(self):
+        """
+        Go through the controller.
+
+        Args:
+            self: (todo): write your description
+        """
         raw_input('Press Enter to Start.')
         while not rospy.is_shutdown():
             self.cs.switch_controller('moveit')

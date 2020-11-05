@@ -3,6 +3,14 @@ import numpy as np
 
 class GridWorld:
     def __init__(self, bounds, resolution):
+        """
+        Initialize the image
+
+        Args:
+            self: (todo): write your description
+            bounds: (todo): write your description
+            resolution: (todo): write your description
+        """
         if np.any(bounds[0, :] > bounds[1, :]):
             raise ValueError('Please make sure bounds[0, :] < bounds[1, :]')
         self.bounds = bounds
@@ -12,6 +20,15 @@ class GridWorld:
         self.maps = {}
 
     def add_grid(self, name, init_value=0, extra_dims=(),):
+        """
+        Add a new grid.
+
+        Args:
+            self: (todo): write your description
+            name: (str): write your description
+            init_value: (str): write your description
+            extra_dims: (str): write your description
+        """
         shape = list(self.shape) + list(extra_dims)
         self.maps[name] = np.full(shape, init_value)
 
@@ -33,9 +50,23 @@ class GridWorld:
         return np.flip(cell_ids, axis=1)
 
     def cell_to_pos(self, cell_ids):
+        """
+        Convert a cell to a cell.
+
+        Args:
+            self: (todo): write your description
+            cell_ids: (str): write your description
+        """
         return (np.flip(cell_ids, axis=1) - self.map_offset) * self.res + self.res/2
 
     def __getattr__(self, item):
+        """
+        Returns the value of an item
+
+        Args:
+            self: (todo): write your description
+            item: (str): write your description
+        """
         return self.maps[item]
 
 
