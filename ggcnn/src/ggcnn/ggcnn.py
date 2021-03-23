@@ -11,11 +11,15 @@ from tensorflow.keras.backend import set_session
 from dougsm_helpers.timeit import TimeIt
 
 MODEL_FILE = 'models/epoch_29_model.hdf5'
-sess = tf.Session()
+config = tf.ConfigProto()
+config.gpu_options.allow_growth = True
+sess = tf.Session(config=config)
 set_session(sess)
 graph = tf.get_default_graph()
 model = load_model(path.join(path.dirname(__file__), MODEL_FILE))
 
+config = tf.ConfigProto()
+config.gpu_options.allow_growth = True
 
 TimeIt.print_output = False  # For debugging/timing
 
