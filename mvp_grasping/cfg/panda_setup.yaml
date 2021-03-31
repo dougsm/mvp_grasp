@@ -1,0 +1,18 @@
+camera_mount_extra_height: 0.035
+remember_joint_values:
+  grip_ready:
+    panda_joint1: -0.1706
+    panda_joint2: -0.8882
+    panda_joint3: -0.8514
+    panda_joint4: -1.9803
+    panda_joint5: -0.6403
+    panda_joint6:  1.3514
+    panda_joint7:  0.6152
+  drop_box:
+    panda_joint1:  0.8263
+    panda_joint2:  1.0896
+    panda_joint3:  0.8203
+    panda_joint4: -0.8825
+    panda_joint5: -0.7649
+    panda_joint6: -1.7213
+    panda_joint7:  2.2823

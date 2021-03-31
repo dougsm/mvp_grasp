@@ -34,22 +34,25 @@ class ViewpointEntropyCalculator:
     This class implements the Grid World portion of the Multi-View controller.
     """
     def __init__(self):
-        self.hist_bins_q = rospy.get_param('~histogram/bins/quality')
-        self.hist_bins_a = rospy.get_param('~histogram/bins/angle')
+        self.hist_bins_q = rospy.get_param('~histogram/bins/quality') # 10
+        self.hist_bins_a = rospy.get_param('~histogram/bins/angle')   # 18
 
-        self.dist_from_best_scale = rospy.get_param('~cost/dist_from_best_scale')
-        self.dist_from_best_gain = rospy.get_param('~cost/dist_from_best_gain')
-        self.dist_from_prev_view_scale = rospy.get_param('~cost/dist_from_prev_view_scale')
-        self.dist_from_prev_view_gain = rospy.get_param('~cost/dist_from_prev_view_gain')
+        self.dist_from_best_scale = rospy.get_param('~cost/dist_from_best_scale') # 0.15
+        self.dist_from_best_gain = rospy.get_param('~cost/dist_from_best_gain')   # 0.2
+        self.dist_from_prev_view_scale = rospy.get_param('~cost/dist_from_prev_view_scale')   # 0.0
+        self.dist_from_prev_view_gain = rospy.get_param('~cost/dist_from_prev_view_gain')     # 0.0
 
-        self.height = (rospy.get_param('~height/z1'), rospy.get_param('~height/z2'))
+        self.height = (rospy.get_param('~height/z1'), rospy.get_param('~height/z2'))          # 0.55 0.40
 
         # Create a GridWorld where we will store values.
         self.gw_bounds = np.array([
             [rospy.get_param('~histogram/bounds/x1'), rospy.get_param('~histogram/bounds/y1')],
             [rospy.get_param('~histogram/bounds/x2'), rospy.get_param('~histogram/bounds/y2')]
         ])
-        self.gw_res = rospy.get_param('~histogram/resolution')
+        #[[-0.17, -0.67],
+        # [0.17, -0.33]]
+
+        self.gw_res = rospy.get_param('~histogram/resolution')     # 0.005
 
         self.reset_gridworld(EmptySrv())
         self.hist_mean = 0
@@ -62,7 +65,7 @@ class ViewpointEntropyCalculator:
         self._xv, self._yv = np.meshgrid(xs, ys)
 
         # Get the camera parameters
-        cam_info_topic = rospy.get_param('~camera/info_topic')
+        cam_info_topic = rospy.get_param('~camera/info_topic')   # camera/depth/camera_info
         camera_info_msg = rospy.wait_for_message(cam_info_topic, CameraInfo)
         self.cam_K = np.array(camera_info_msg.K).reshape((3, 3))
 
@@ -81,7 +84,7 @@ class ViewpointEntropyCalculator:
         self.curr_depth_img = None
         self.curr_img_time = 0
         self.last_image_pose = None
-        rospy.Subscriber(rospy.get_param('~camera/depth_topic'), Image, self._depth_img_callback, queue_size=1)
+        rospy.Subscriber(rospy.get_param('~camera/depth_topic'), Image, self._depth_img_callback, queue_size=1) #/camera/depth/image_meters
 
     def _depth_img_callback(self, msg):
         """
@@ -335,7 +338,7 @@ class ViewpointEntropyCalculator:
         cell_id = self.gw.pos_to_cell(np.array([[req.point.x, req.point.y]]))[0]
         new_fp[cell_id[0], cell_id[1]] = 1.0
         new_fp = gaussian_filter(new_fp, 0.0075/self.gw.res, mode='nearest', truncate=3)
-        self.fgw.failures = 0.5*self.fgw.failures + 0.5* new_fp/new_fp.max()
+        self.fgw.failures = 0.5*self.fgw.failures + 0.5 * new_fp/new_fp.max()
         return AddFailurePointResponse()
 
 
